@@ -1,29 +1,73 @@
+import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:shake/shake.dart';
+import 'package:sensors_plus/sensors_plus.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../services/email_service.dart';
 
 class ShakeHandler {
-  static ShakeDetector? _detector;
+  static StreamSubscription<AccelerometerEvent>? _subscription;
   static bool _isProcessing = false;
   static DateTime? _lastShakeTime;
   static const Duration _cooldownDuration = Duration(seconds: 30);
+  
+  // Shake detection parameters
+  static const double _shakeThreshold = 2.7; // Gravity threshold
+  static const int _shakeDuration = 500; // ms
+  static int _shakeCount = 0;
+  static DateTime? _firstShakeTime;
 
-  /// Initialize the shake detector
+  /// Initialize the shake detector using sensors_plus
   static void initialize(BuildContext context) {
-    _detector = ShakeDetector.autoStart(
-      onPhoneShake: () {
-        _handleShake(context);
-      },
-      minimumShakeCount: 3,
-      shakeSlopTimeMS: 500,
-      shakeCountResetTime: 3000,
-      shakeThresholdGravity: 2.7,
-    );
+    _subscription = accelerometerEventStream().listen((AccelerometerEvent event) {
+      _detectShake(event, context);
+    });
     
     print('🔔 Shake detector initialized - Shake your phone 3 times for emergency help');
+  }
+
+  /// Detect shake from accelerometer data
+  static void _detectShake(AccelerometerEvent event, BuildContext context) {
+    // Calculate acceleration magnitude
+    double x = event.x;
+    double y = event.y;
+    double z = event.z;
+    
+    double acceleration = sqrt(x * x + y * y + z * z);
+    double gForce = acceleration / 9.81; // Normalize to g-force
+    
+    // Check if acceleration exceeds threshold
+    if (gForce > _shakeThreshold) {
+      DateTime now = DateTime.now();
+      
+      if (_firstShakeTime == null) {
+        _firstShakeTime = now;
+        _shakeCount = 1;
+      } else {
+        int timeDiff = now.difference(_firstShakeTime!).inMilliseconds;
+        
+        if (timeDiff < _shakeDuration * 3) {
+          _shakeCount++;
+          
+          // If 3 shakes detected within time window
+          if (_shakeCount >= 3) {
+            _handleShake(context);
+            _resetShakeDetection();
+          }
+        } else {
+          // Reset if too much time passed
+          _resetShakeDetection();
+        }
+      }
+    }
+  }
+
+  /// Reset shake detection counters
+  static void _resetShakeDetection() {
+    _firstShakeTime = null;
+    _shakeCount = 0;
   }
 
   /// Handle shake event
@@ -219,8 +263,9 @@ class ShakeHandler {
 
   /// Dispose the shake detector
   static void dispose() {
-    _detector?.stopListening();
-    _detector = null;
+    _subscription?.cancel();
+    _subscription = null;
+    _resetShakeDetection();
     print('🔕 Shake detector disposed');
   }
 }

@@ -62,7 +62,6 @@ dependencies:
   flutter_svg: ^2.0.17
   share_plus: ^10.1.4
   http: ^1.2.2
-  shake: ^3.3.0
  
  
 
