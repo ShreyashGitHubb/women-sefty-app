@@ -2,30 +2,114 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:mailer/mailer.dart';
+import 'package:mailer/smtp_server.dart';
 
 class EmailService {
-  // Resend API Configuration
+  // Gmail SMTP Configuration
+  static const String _gmailEmail = 'hme05825@gmail.com';
+  static const String _gmailAppPassword = 'ccnq oygl pzdk zqgz'; // App Password provided by user
+  
+  // Resend API Configuration (Fallback)
   static const String _resendApiKey = 're_CPxbJ5TY_7UK6QVNVGcuYPb87p3K7tVtz';
+  static const String _fromEmailResend = 'onboarding@resend.dev';
   
-  // Verified sender email from Resend
-  static const String _fromEmail = 'onboarding@resend.dev';
-  
-  // Recipient email (trusted contact who receives emergency alerts)
-  static const String _recipientEmail = 'hme05825@gmail.com';
+  // Placeholder for default recipient if none provided
+  static const String _defaultRecipientEmail = 'hme05825@gmail.com';
   
   static const String _resendApiUrl = 'https://api.resend.com/emails';
 
   /// Sends an urgent help email with the user's exact location
-  static Future<bool> sendHelpEmail(Position position) async {
+  /// Tries SMTP first, then falls back to Resend API
+  static Future<bool> sendHelpEmail(Position position, List<String> recipients) async {
+    // If no recipients provided, use default
+    if (recipients.isEmpty) {
+      recipients = [_defaultRecipientEmail];
+    }
+    
+    // Filter out empty strings
+    recipients = recipients.where((e) => e.isNotEmpty).toList();
+    
+    if (recipients.isEmpty) {
+       print('⚠️ No valid recipients found.');
+       return false;
+    }
+
     try {
-      // Get address from coordinates
-      String address = await _getAddressFromCoordinates(position);
+      // 1. Try sending via Gmail SMTP
+      bool smtpSuccess = await _sendViaGmailSMTP(position, recipients);
+      if (smtpSuccess) {
+        return true;
+      }
       
-      // Create Google Maps link
+      print('⚠️ SMTP failed, falling back to Resend API...');
+      
+      // 2. Fallback to Resend API
+      return await _sendViaResendAPI(position, recipients);
+    } catch (e) {
+      print('❌ Error in email sequence: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> _sendViaGmailSMTP(Position position, List<String> recipients) async {
+    final smtpServer = gmail(_gmailEmail, _gmailAppPassword);
+    
+    // Get address
+    String address = await _getAddressFromCoordinates(position);
+    String mapsUrl = 'https://www.google.com/maps?q=${position.latitude},${position.longitude}';
+
+    final message = Message()
+      ..from = Address(_gmailEmail, 'Women Safety App')
+      ..recipients.addAll(recipients)
+      ..subject = '🚨 URGENT: Emergency Help Alert via Gmail'
+      ..html = _generateHtmlBody(address, mapsUrl, position, "Gmail SMTP");
+
+    try {
+      final sendReport = await send(message, smtpServer);
+      print('✅ Email sent via Gmail SMTP: ${sendReport.toString()}');
+      return true;
+    } catch (e) {
+      print('❌ Gmail SMTP Error: $e');
+      return false; // Trigger fallback
+    }
+  }
+
+  static Future<bool> _sendViaResendAPI(Position position, List<String> recipients) async {
+    try {
+      String address = await _getAddressFromCoordinates(position);
       String mapsUrl = 'https://www.google.com/maps?q=${position.latitude},${position.longitude}';
       
-      // Create email body with HTML formatting
-      String htmlBody = '''
+      // Resend might have limits, but we send as list
+      final response = await http.post(
+        Uri.parse(_resendApiUrl),
+        headers: {
+          'Authorization': 'Bearer $_resendApiKey',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'from': _fromEmailResend,
+          'to': recipients,
+          'subject': '🚨 URGENT: Emergency Help Alert (Resend Fallback)',
+          'html': _generateHtmlBody(address, mapsUrl, position, "Resend API"),
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        print('✅ Email sent via Resend API');
+        return true;
+      } else {
+        print('❌ Resend API Failed: ${response.statusCode}');
+        return false;
+      }
+    } catch (e) {
+      print('❌ Resend Error: $e');
+      return false;
+    }
+  }
+  
+  static String _generateHtmlBody(String address, String mapsUrl, Position position, String method) {
+      return '''
 <!DOCTYPE html>
 <html>
 <head>
@@ -45,7 +129,7 @@ class EmailService {
       border-radius: 5px; 
       margin-top: 15px;
     }
-    .timestamp { color: #6c757d; font-size: 0.9em; margin-top: 20px; }
+    .footer { margin-top: 20px; font-size: 0.8em; color: #777; }
   </style>
 </head>
 <body>
@@ -57,6 +141,7 @@ class EmailService {
     <div class="info-section">
       <p><strong>This is an automated emergency alert from the Women Safety App.</strong></p>
       <p>A user has triggered the shake-to-help feature. Please take immediate action.</p>
+      <p><em>Sent via: $method</em></p>
     </div>
     
     <div class="info-section">
@@ -73,62 +158,13 @@ class EmailService {
       <a href="$mapsUrl" class="maps-button">📍 Open in Google Maps</a>
     </div>
     
-    <div class="timestamp">
-      <p>⏰ <strong>Alert triggered at:</strong> ${DateTime.now().toString()}</p>
+    <div class="footer">
+      <p>⏰ Alert triggered at: ${DateTime.now().toString()}</p>
     </div>
   </div>
 </body>
 </html>
       ''';
-
-      // Plain text version as fallback
-      String textBody = '''
-🚨 EMERGENCY HELP ALERT 🚨
-
-This is an automated emergency alert from the Women Safety App.
-A user has triggered the shake-to-help feature. Please take immediate action.
-
-📍 LOCATION DETAILS:
-Address: $address
-
-Coordinates:
-Latitude: ${position.latitude.toStringAsFixed(6)}
-Longitude: ${position.longitude.toStringAsFixed(6)}
-Accuracy: ${position.accuracy.toStringAsFixed(2)} meters
-
-Google Maps Link: $mapsUrl
-
-⏰ Alert triggered at: ${DateTime.now()}
-      ''';
-
-      // Send email via Resend API
-      final response = await http.post(
-        Uri.parse(_resendApiUrl),
-        headers: {
-          'Authorization': 'Bearer $_resendApiKey',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'from': _fromEmail,
-          'to': [_recipientEmail],
-          'subject': '🚨 URGENT: Emergency Help Alert with Location',
-          'html': htmlBody,
-          'text': textBody,
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        print('✅ Emergency email sent successfully');
-        return true;
-      } else {
-        print('❌ Failed to send email: ${response.statusCode}');
-        print('Response: ${response.body}');
-        return false;
-      }
-    } catch (e) {
-      print('❌ Error sending help email: $e');
-      return false;
-    }
   }
 
   /// Converts coordinates to a human-readable address

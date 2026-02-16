@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import '../../services/voice_service.dart';
 import '../../utils/constans.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class VoiceSettingsScreen extends StatefulWidget {
   const VoiceSettingsScreen({super.key});
@@ -19,6 +20,22 @@ class _VoiceSettingsScreenState extends State<VoiceSettingsScreen> {
   void initState() {
     super.initState();
     _loadSettings();
+    _checkPermission();
+  }
+
+  String _permissionStatus = "Checking...";
+
+  Future<void> _checkPermission() async {
+    var status = await Permission.microphone.status;
+    setState(() {
+      _permissionStatus = status.isGranted ? "Granted ✅" : "Denied ❌";
+    });
+  }
+
+  Future<void> _requestPermission() async {
+    await Permission.microphone.request();
+    _checkPermission();
+    VoiceService.initialize(); // Re-init
   }
 
   Future<void> _loadSettings() async {
@@ -126,6 +143,35 @@ class _VoiceSettingsScreenState extends State<VoiceSettingsScreen> {
               ),
             ),
             
+            SizedBox(height: 20),
+            
+            // Permission Status
+            Container(
+              padding: EdgeInsets.all(15),
+              decoration: BoxDecoration(
+                color: _permissionStatus.contains("Granted") ? Colors.green[50] : Colors.red[50],
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: _permissionStatus.contains("Granted") ? Colors.green.shade100 : Colors.red.shade100
+                ),
+              ),
+              child: Row(
+                children: [
+                   Icon(
+                     _permissionStatus.contains("Granted") ? Icons.mic : Icons.mic_off,
+                     color: _permissionStatus.contains("Granted") ? Colors.green : Colors.red
+                   ),
+                   SizedBox(width: 10),
+                   Expanded(child: Text("Mic Permission: $_permissionStatus")),
+                   if (!_permissionStatus.contains("Granted"))
+                     TextButton(
+                       onPressed: _requestPermission,
+                       child: Text("Allow"),
+                     )
+                ],
+              ),
+            ),
+
             Spacer(),
             
             // Save Button

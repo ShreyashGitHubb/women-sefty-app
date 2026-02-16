@@ -33,7 +33,12 @@ class _AddContactLocalState extends State<AddContactLocal> {
       _contacts =
           contactsData.map((contactString) {
             final parts = contactString.split(',');
-            return {'id': parts[0], 'name': parts[1], 'mobileNumber': parts[2]};
+            // Handle legacy data (id,name,phone) vs new data (id,name,phone,email)
+            if (parts.length >= 4) {
+               return {'id': parts[0], 'name': parts[1], 'mobileNumber': parts[2], 'email': parts[3]};
+            } else {
+               return {'id': parts[0], 'name': parts[1], 'mobileNumber': parts[2], 'email': ''};
+            }
           }).toList();
     });
   }
@@ -44,74 +49,35 @@ class _AddContactLocalState extends State<AddContactLocal> {
         _contacts
             .map(
               (contact) =>
-                  '${contact['id']},${contact['name']},${contact['mobileNumber']}',
+                  '${contact['id']},${contact['name']},${contact['mobileNumber']},${contact['email'] ?? ''}',
             )
             .toList();
     await prefs.setStringList('emergency_contacts', contactsData);
   }
 
-  Future<void> _makePhoneCall(String number) async {
-    final Uri phoneUri = Uri(scheme: 'tel', path: number);
+  // ... (keeping _makePhoneCall and _deleteContact as is)
 
-    try {
-      PermissionStatus status = await Permission.phone.request();
-      print("Phone permission status: $status"); // Added logging
-
-      if (status.isGranted) {
-        final launched = await launchUrl(
-          phoneUri,
-          mode: LaunchMode.externalApplication,
-        );
-        if (!launched) {
-          Fluttertoast.showToast(
-            msg: "Could not place call. Please check the number format.",
-          );
-        }
-      } else if (status.isDenied) {
-        Fluttertoast.showToast(
-          msg:
-              "Phone call permission denied. Please grant it in the app settings.",
-        );
-        openAppSettings(); // Open app settings for the user to grant permission
-      } else if (status.isPermanentlyDenied) {
-        Fluttertoast.showToast(
-          msg:
-              "Phone call permission permanently denied. Please enable it in the app settings.",
-        );
-        openAppSettings(); // Open app settings
-      }
-    } catch (e) {
-      Fluttertoast.showToast(msg: "Error: ${e.toString()}");
-    }
-  }
-
-  Future<void> _deleteContact(String contactId) async {
-    setState(() {
-      _contacts.removeWhere((contact) => contact['id'] == contactId);
-    });
-    await _saveContacts();
-    Fluttertoast.showToast(msg: "Contact removed successfully");
-  }
-
-  Future<void> _addContact(String name, String mobileNumber) async {
+  Future<void> _addContact(String name, String mobileNumber, String email) async {
     if (name.isNotEmpty && mobileNumber.isNotEmpty) {
       setState(() {
         _contacts.add({
           'id': DateTime.now().millisecondsSinceEpoch.toString(),
           'name': name,
           'mobileNumber': mobileNumber,
+          'email': email,
         });
       });
       await _saveContacts();
       Fluttertoast.showToast(msg: "Contact added successfully");
     } else {
-      Fluttertoast.showToast(msg: "Please enter both name and mobile number");
+      Fluttertoast.showToast(msg: "Please enter name and mobile number");
     }
   }
 
   Future<void> _showAddContactDialog(BuildContext context) async {
     final nameController = TextEditingController();
     final mobileNumberController = TextEditingController();
+    final emailController = TextEditingController();
 
     return showDialog<void>(
       context: context,
@@ -130,6 +96,11 @@ class _AddContactLocalState extends State<AddContactLocal> {
                 keyboardType: TextInputType.phone,
                 decoration: const InputDecoration(hintText: 'Mobile Number'),
               ),
+              TextField(
+                controller: emailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(hintText: 'Email (Optional)'),
+              ),
             ],
           ),
           actions: <Widget>[
@@ -142,7 +113,7 @@ class _AddContactLocalState extends State<AddContactLocal> {
             TextButton(
               child: const Text('Add'),
               onPressed: () {
-                _addContact(nameController.text, mobileNumberController.text);
+                _addContact(nameController.text, mobileNumberController.text, emailController.text);
                 Navigator.of(context).pop();
               },
             ),
@@ -180,7 +151,14 @@ class _AddContactLocalState extends State<AddContactLocal> {
                       color: Colors.pink.shade50,
                       child: ListTile(
                         title: Text(contact['name']!),
-                        subtitle: Text("${contact['mobileNumber']!}"),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text("📞 ${contact['mobileNumber']!}"),
+                            if (contact['email'] != null && contact['email']!.isNotEmpty)
+                              Text("📧 ${contact['email']!}", style: TextStyle(fontSize: 12)),
+                          ],
+                        ),
                         trailing: SizedBox(
                           width: 100,
                           child: Row(

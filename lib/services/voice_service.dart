@@ -2,6 +2,7 @@ import 'package:speech_to_text/speech_to_text.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'siren_service.dart';
 
 class VoiceService {
@@ -45,15 +46,46 @@ class VoiceService {
       await isEnabled();
       await getTriggerPhrase();
       
+      // Request microphone permission explicitly
+      var status = await Permission.microphone.status;
+      if (!status.isGranted) {
+        status = await Permission.microphone.request();
+        if (!status.isGranted) {
+          print('❌ Microphone permission denied');
+          Fluttertoast.showToast(msg: "Microphone permission required for voice features");
+          return;
+        }
+      }
+
       bool available = await _speechToText.initialize(
-        onStatus: (status) => print('🎤 Voice Status: $status'),
-        onError: (error) => print('❌ Voice Error: $error'),
+        onStatus: (status) {
+          print('🎤 Voice Status: $status');
+          // Restart listener if it stops and should be running
+          if (status == 'done' || status == 'notListening') {
+             if (_isListening && _isEnabled) {
+               // Restart after a short delay to prevent loop
+               Future.delayed(Duration(seconds: 1), () {
+                  _startListeningInternal();
+               });
+             }
+          }
+        },
+        onError: (error) {
+          print('❌ Voice Error: $error');
+          // Restart on error too
+          if (_isListening && _isEnabled) {
+             Future.delayed(Duration(seconds: 2), () {
+                _startListeningInternal();
+             });
+          }
+        },
       );
       
       if (available) {
         print('✅ Speech recognition initialized');
       } else {
         print('❌ Speech recognition not available');
+        Fluttertoast.showToast(msg: "Voice recognition not available on this device");
       }
     } catch (e) {
       print('❌ Error initializing voice service: $e');
@@ -62,19 +94,30 @@ class VoiceService {
 
   /// Start listening for trigger phrase
   static void startListening(BuildContext context) async {
+    _context = context; // Store context for siren
     if (!_isEnabled || _isListening) return;
+    _isListening = true;
+    _startListeningInternal();
+  }
+
+  static BuildContext? _context;
+
+  static void _startListeningInternal() async {
+    if (!_isEnabled || !_isListening) return;
+    if (_speechToText.isListening) return;
 
     try {
-      _isListening = true;
-      _speechToText.listen(
+      await _speechToText.listen(
         onResult: (result) {
           String recognizedWords = result.recognizedWords.toLowerCase();
           print('🗣️ Heard: "$recognizedWords"');
           
+          if (_context == null) return;
+
           // Check for trigger phrase
           if (recognizedWords.contains(_triggerPhrase)) {
             print('🚨 Trigger phrase detected: "$_triggerPhrase"');
-            SirenService.playSiren(context);
+            SirenService.playSiren(_context!);
           }
           
           // Check for STOP command
@@ -83,15 +126,14 @@ class VoiceService {
             SirenService.stopSiren();
           }
         },
-        listenFor: Duration(seconds: 30),
-        pauseFor: Duration(seconds: 5),
+        listenFor: Duration(seconds: 20),
+        pauseFor: Duration(seconds: 3),
         partialResults: true,
-        cancelOnError: true,
+        cancelOnError: false,
         listenMode: ListenMode.dictation,
       );
     } catch (e) {
       print('❌ Error starting listener: $e');
-      _isListening = false;
     }
   }
 

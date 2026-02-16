@@ -5,6 +5,7 @@ import 'package:sensors_plus/sensors_plus.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/email_service.dart';
 
 class ShakeHandler {
@@ -124,8 +125,21 @@ class ShakeHandler {
       // Get high-accuracy location
       Position position = await _getCurrentLocation();
 
+      // Get trusted contacts emails from SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      final contactsData = prefs.getStringList('emergency_contacts') ?? [];
+      List<String> recipients = [];
+      
+      for (String contact in contactsData) {
+        final parts = contact.split(',');
+        // Check if email exists (index 3)
+        if (parts.length >= 4 && parts[3].isNotEmpty) {
+          recipients.add(parts[3]);
+        }
+      }
+
       // Send help email
-      bool emailSent = await EmailService.sendHelpEmail(position);
+      bool emailSent = await EmailService.sendHelpEmail(position, recipients);
 
       if (emailSent) {
         Fluttertoast.showToast(
