@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../utils/shake_handler.dart';
+import '../services/voice_service.dart';
+import 'bottom_screens/voice_settings_screen.dart';
 
 import 'bottom_screens/addContact_fire.dart';
 import 'bottom_screens/chat_page.dart';
@@ -30,6 +32,8 @@ class _BottomPageState extends State<BottomPage> {
     // Initialize shake detector for emergency help
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ShakeHandler.initialize(context);
+      VoiceService.initialize();
+      VoiceService.startListening(context);
     });
   }
   
@@ -37,6 +41,7 @@ class _BottomPageState extends State<BottomPage> {
   void dispose() {
     // Clean up shake detector
     ShakeHandler.dispose();
+    VoiceService.stopListening();
     super.dispose();
   }
   
@@ -50,6 +55,17 @@ class _BottomPageState extends State<BottomPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: pages[currentIndex],
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => VoiceSettingsScreen()),
+          );
+        },
+        backgroundColor: Colors.pink,
+        child: Icon(Icons.record_voice_over),
+        heroTag: "voice_settings_btn",
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: currentIndex,
         type: BottomNavigationBarType.fixed,
