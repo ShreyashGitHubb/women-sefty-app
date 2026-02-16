@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import '../../services/voice_service.dart';
-import '../../utils/constants.dart';
+import '../../utils/constans.dart';
 
 class VoiceSettingsScreen extends StatefulWidget {
   const VoiceSettingsScreen({super.key});
