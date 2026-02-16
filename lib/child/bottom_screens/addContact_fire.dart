@@ -55,7 +55,48 @@ class _AddContactLocalState extends State<AddContactLocal> {
     await prefs.setStringList('emergency_contacts', contactsData);
   }
 
-  // ... (keeping _makePhoneCall and _deleteContact as is)
+  Future<void> _makePhoneCall(String number) async {
+    final Uri phoneUri = Uri(scheme: 'tel', path: number);
+
+    try {
+      PermissionStatus status = await Permission.phone.request();
+      print("Phone permission status: $status");
+
+      if (status.isGranted) {
+        final launched = await launchUrl(
+          phoneUri,
+          mode: LaunchMode.externalApplication,
+        );
+        if (!launched) {
+          Fluttertoast.showToast(
+            msg: "Could not place call. Please check the number format.",
+          );
+        }
+      } else if (status.isDenied) {
+        Fluttertoast.showToast(
+          msg:
+              "Phone call permission denied. Please grant it in the app settings.",
+        );
+        openAppSettings();
+      } else if (status.isPermanentlyDenied) {
+        Fluttertoast.showToast(
+          msg:
+              "Phone call permission permanently denied. Please enable it in the app settings.",
+        );
+        openAppSettings();
+      }
+    } catch (e) {
+      Fluttertoast.showToast(msg: "Error: ${e.toString()}");
+    }
+  }
+
+  Future<void> _deleteContact(String contactId) async {
+    setState(() {
+      _contacts.removeWhere((contact) => contact['id'] == contactId);
+    });
+    await _saveContacts();
+    Fluttertoast.showToast(msg: "Contact removed successfully");
+  }
 
   Future<void> _addContact(String name, String mobileNumber, String email) async {
     if (name.isNotEmpty && mobileNumber.isNotEmpty) {
