@@ -59,6 +59,7 @@ class VoiceService {
       // Request microphone permission explicitly
       var status = await Permission.microphone.status;
       if (!status.isGranted) {
+        print("Requesting microphone permission...");
         status = await Permission.microphone.request();
         if (!status.isGranted) {
           print('❌ Microphone permission denied');
@@ -74,6 +75,7 @@ class VoiceService {
           if (status == 'done' || status == 'notListening') {
              if (_isEnabled && _isListening) {
                // Immediate restart check
+               print("Restarting listener...");
                _reStartListening();
              }
           }
@@ -90,12 +92,14 @@ class VoiceService {
       if (available) {
         _isInitialized = true;
         print('✅ Speech recognition initialized');
+        // Fluttertoast.showToast(msg: "Voice Service Initialized");
       } else {
         print('❌ Speech recognition not available');
         Fluttertoast.showToast(msg: "Voice recognition not available on this device");
       }
     } catch (e) {
       print('❌ Error initializing voice service: $e');
+      Fluttertoast.showToast(msg: "Error initializing Voice Service: $e");
     }
   }
 
@@ -120,25 +124,34 @@ class VoiceService {
   }
 
   static void _startListeningInternal() async {
-    if (!_isEnabled || !_isInitialized) return;
-    if (_speechToText.isListening) return;
+    if (!_isEnabled || !_isInitialized) {
+        print("Declined to start listening: Enabled: $_isEnabled, Initialized: $_isInitialized");
+        return;
+    }
+    if (_speechToText.isListening) {
+        print("Already listening");
+        return;
+    }
 
     try {
+      print("Attempting to start listening...");
       // Android often has a system limit on listening duration. 
       // We set a long duration, but valid restarts are key for "always on".
       await _speechToText.listen(
         onResult: (result) {
           String recognizedWords = result.recognizedWords.toLowerCase();
-          // print('🗣️ Heard: "$recognizedWords"'); // Verbose logging
+          print('🗣️ Heard: "$recognizedWords"'); // Verbose logging
           
           if (_context == null) return;
 
           // Check for trigger phrase
           if (recognizedWords.contains(_triggerPhrase) || 
               recognizedWords.contains("bachao") || 
+              recognizedWords.contains("help") || // explicitly adding help
               recognizedWords.contains("save me")) {
             print('🚨 Trigger phrase detected: "$recognizedWords"');
             SirenService.playSiren(_context!);
+            Fluttertoast.showToast(msg: "Siren Activated by Voice!");
           }
           
           // Check for STOP command
@@ -147,12 +160,13 @@ class VoiceService {
             SirenService.stopSiren();
           }
         },
-        listenFor: Duration(seconds: 60), // Increased to 60s
-        pauseFor: Duration(seconds: 10),  // Increased pause tolerance
+        listenFor: Duration(seconds: 30), // Reduce to standard limit, rely on restart
+        pauseFor: Duration(seconds: 5),   // Shorter pause to detect silence and restart
         partialResults: true,
-        cancelOnError: false,
-        listenMode: ListenMode.dictation,
+        cancelOnError: true, // Cancel on error to trigger restart logic
+        listenMode: ListenMode.confirmation, // Try confirmation or search for better continuous
       );
+      print("Listening started");
     } catch (e) {
       print('❌ Error starting listener: $e');
       // Try to restart if it failed to start
@@ -164,5 +178,6 @@ class VoiceService {
   static void stopListening() {
     _isListening = false;
     _speechToText.stop();
+    print("Stopped listening");
   }
 }

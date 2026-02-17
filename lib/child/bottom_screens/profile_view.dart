@@ -5,7 +5,7 @@ import 'package:map_app/services/supabase_service.dart';
 
 import '../child_login_screen.dart';
 import 'profile_page.dart';
-import '../../login.dart'; 
+// import '../../login.dart'; 
 
 class ProfileViewPage extends StatefulWidget {
   const ProfileViewPage({super.key});

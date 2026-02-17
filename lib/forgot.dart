@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:map_app/services/supabase_service.dart';
-import 'package:map_app/utils/constants.dart';
+import 'package:map_app/utils/constans.dart';
 
 class ForgotPassword extends StatefulWidget {
   const ForgotPassword({super.key});

@@ -31,7 +31,10 @@ class _ProfilePageState extends State<ProfilePage> {
   // Fetch user data from Firestore
   // Fetch user data from Supabase
   getname() async {
-    final profile = await SupabaseService.getProfile();
+    final user = SupabaseService.currentUser;
+    if (user == null) return;
+    
+    final profile = await SupabaseService.getProfile(user.id);
     if (profile != null) {
         nameC.text = profile['full_name'] ?? "";
         emailC.text = profile['child_email'] ?? ""; // prioritize child email if that's what we want

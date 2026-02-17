@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+// import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -7,7 +7,7 @@ class SingleMessage extends StatelessWidget {
   final bool? isme;
   final String? image;
   final String? type;
-  final Timestamp?  date;
+  final DateTime?  date;
   final String? myName;
   final String? friendName;
   const SingleMessage({super.key, this.message, this.isme, this.image, this.type, this.date, this.myName, this.friendName});
@@ -15,7 +15,7 @@ class SingleMessage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size=MediaQuery.of(context).size;
-    DateTime d=DateTime.parse(date!.toDate().toString());
+    DateTime d = date!;
     String cDate="${d.hour}" + ":"+"${d.minute}";
     
     return type=="text"?
