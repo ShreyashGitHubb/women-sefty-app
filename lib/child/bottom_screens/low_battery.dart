@@ -1,6 +1,7 @@
 import 'package:battery_plus/battery_plus.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+// import 'package:cloud_firestore/cloud_firestore.dart';
+// import 'package:firebase_auth/firebase_auth.dart';
+import 'package:map_app/services/supabase_service.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -31,25 +32,16 @@ class LowBatteryAlert {
 
  Future<void> _createSOSAlert() async {
   try {
-    String userId = FirebaseAuth.instance.currentUser?.uid ?? "Unknown User";
+    String? userId = SupabaseService.currentUser?.id;
+    if (userId == null) return;
     String alertId = Uuid().v4(); // Generate a unique alert ID
 
-    // Prepare alert data
-    final alertData = {
-      'alert_name': 'Low Battery Alert',
-      'alert_id': alertId,
-      'timestamp': FieldValue.serverTimestamp(),
-     // 'location': "https://www.google.com/maps?q=$latitude,$longitude", // Include location if available
-     'latitude':latitude,
-     'longtitude':longitude,
-    };
-
-    // Store SOS alert data inside the user's document under the sos_alert collection
-    await FirebaseFirestore.instance
-        .collection('users')        // Access 'users' collection
-        .doc(userId)                // Access user's document
-        .collection('sos_alert')    // Create the sos_alert collection inside the user document
-        .add(alertData);            // Add the alert document
+    await SupabaseService.createSOSAlert(
+         userId,
+         'Low_Battery_Alert', 
+         latitude ?? 0.0, 
+         longitude ?? 0.0
+    );
 
    // Fluttertoast.showToast(msg: "SOS alert stored successfully with ID: $alertId");
   } catch (e) {
@@ -96,7 +88,7 @@ class LowBatteryAlert {
 
 
 Future<void> _sendLocationToContacts() async {
-  final userId = FirebaseAuth.instance.currentUser?.uid;
+  final userId = SupabaseService.currentUser?.id;
 
   if (userId == null) {
     Fluttertoast.showToast(msg: "User not logged in.");
@@ -110,33 +102,23 @@ Future<void> _sendLocationToContacts() async {
   }
 
   try {
-    // Store location in Firestore
-     
+    // Fetch emergency contacts from Supabase
+    final contactsData = await SupabaseService.getContacts();
 
-    // Fetch emergency contacts
-    QuerySnapshot contactsSnapshot = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(userId)
-        .collection('contacts')
-        .get();
-
-    if (contactsSnapshot.docs.isEmpty) {
+    if (contactsData.isEmpty) {
       Fluttertoast.showToast(msg: "No emergency contacts found.");
       return;
     }
 
-   
     // Prepare message
     String message =
-        "my battery is low! My current location is: https://www.google.com/maps?q=$latitude,$longitude";
+        "My battery is low! My current location is: https://www.google.com/maps?q=$latitude,$longitude";
 
- 
- List<String> contactNumbers = [];
-    for (QueryDocumentSnapshot contactDoc in contactsSnapshot.docs) {
-      final contactData = contactDoc.data() as Map<String, dynamic>;
-      final contactNumber = contactData['mobileNumber'];
-      if (contactNumber != null && contactNumber.isNotEmpty) {
-        contactNumbers.add(contactNumber);
+    List<String> contactNumbers = [];
+    for (var contact in contactsData) {
+      final contactNumber = contact['mobile'];
+      if (contactNumber != null && contactNumber.toString().isNotEmpty) {
+        contactNumbers.add(contactNumber.toString());
       }
     }
 

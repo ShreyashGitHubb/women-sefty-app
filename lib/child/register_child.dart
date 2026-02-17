@@ -1,12 +1,11 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-//import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:fluttertoast/fluttertoast.dart';
+import 'package:map_app/services/supabase_service.dart';
 
 import '../components/PrimaryButton.dart';
 import '../components/SecondaryButton.dart';
 import '../components/custom_textfield.dart';
-import '../model/user_model.dart';
+// import '../model/user_model.dart'; // Likely not needed if we insert directly via service
 import '../utils/constans.dart';
 import 'child_login_screen.dart';
 
@@ -27,63 +26,33 @@ class _RegisterChildScreenState extends State<RegisterChildScreen> {
   _onSubmit() async {
     _formKey.currentState!.save();
     if (_formData['password'] != _formData['rpassword']) {
-      dialog(context, 'password andretype password should be equeal');
+      dialog(context, 'password and retype password should be equal');
     } else {
-      showLoadingDialog(context);
-      try {
-        setState(() {
-          isloading = true;
-        });
-        UserCredential userCredential = await FirebaseAuth.instance
-            .createUserWithEmailAndPassword(
-              email: _formData['email'].toString(),
-              password: _formData['password'].toString(),
-            );
-        if (userCredential.user != null) {
-          final v = userCredential.user!.uid;
-          DocumentReference<Map<String, dynamic>> db = FirebaseFirestore
-              .instance
-              .collection('users')
-              .doc(v);
-          final user = UserModel(
-            name: _formData['name'].toString(),
-            phone: _formData['phone'].toString(),
-            childEmail: _formData['email'].toString(),
-            parentEmail: _formData['gemail'].toString(),
-            id: v,
-            type: 'child',
-            adminEmail: null,
-          );
-          final jsonData = user.toJson();
+      setState(() {
+        isloading = true;
+      });
+      
+      final response = await SupabaseService.signUp(
+        _formData['email'].toString(),
+        _formData['password'].toString(),
+        _formData['name'].toString(),
+        type: 'child',
+        phone: _formData['phone'].toString(),
+        parentEmail: _formData['gemail'].toString(),
+      );
 
-          await db.set(jsonData).whenComplete(() {
-            goTo(context, LoginScreen());
-            setState(() {
-              isloading = false;
-            });
-          });
-        }
-      } on FirebaseAuthException catch (e) {
-        setState(() {
-          isloading = false;
-        });
-        if (e.code == 'weak-password') {
-          print('The password provided is too weak.');
-          dialog(context, 'The password provided is too weak.');
-        } else if (e.code == 'email-already-in-use') {
-          print('The account already exists for that email.');
-          dialog(context, 'The account already exists for that email.');
-        }
-      } catch (e) {
-        print(e);
-        setState(() {
-          isloading = false;
-        });
-        dialog(context, e.toString());
+      setState(() {
+        isloading = false;
+      });
+
+      if (response != null && response.user != null) {
+        Fluttertoast.showToast(msg: "Registration Successful! Please Login.");
+         goTo(context, LoginScreen());
+      } else {
+         // Error handled in SupabaseService or returned null
+         // Only show generic error if service didn't toast
       }
     }
-    print(_formData['email']);
-    print(_formData['password']);
   }
 
   @override

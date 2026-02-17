@@ -1,11 +1,11 @@
 import 'dart:io';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:map_app/services/supabase_service.dart';
 
 import '../child_login_screen.dart';
 import 'profile_page.dart';
+import '../../login.dart'; 
 
 class ProfileViewPage extends StatefulWidget {
   const ProfileViewPage({super.key});
@@ -22,19 +22,21 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
   // Fetch user data from Firestore
   Future<void> getUserData() async {
     try {
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .where('id', isEqualTo: FirebaseAuth.instance.currentUser!.uid)
-          .get();
+      final user = SupabaseService.currentUser;
+      if (user == null) {
+          Fluttertoast.showToast(msg: "No user logged in");
+          return;
+      }
 
-      if (userDoc.docs.isNotEmpty) {
-        final userData = userDoc.docs.first.data();
-        print("Fetched User Data: $userData"); // Debugging: Log user data
+      final userData = await SupabaseService.getProfile(user.id);
+
+      if (userData != null) {
+        print("Fetched User Data: $userData"); 
 
         setState(() {
-          name = userData['name'] ?? "No Name Available";
-          email = userData['childEmail'] ?? "No Email Available";
-          profilepic = userData['profilepic'];
+          name = userData['full_name'] ?? "No Name Available"; // 'full_name' matches Supabase table
+          email = userData['email'] ?? "No Email Available";
+          // profilepic = userData['profilepic']; // TODO: Add profile pic support
         });
       } else {
         Fluttertoast.showToast(msg: "No user data found");
@@ -45,7 +47,7 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
       }
     } catch (e) {
       Fluttertoast.showToast(msg: "Error fetching profile: $e");
-      print("Error fetching profile: $e"); // Debugging: Log error
+      print("Error fetching profile: $e"); 
       setState(() {
         name = "Error Loading Name";
         email = "Error Loading Email";
@@ -73,13 +75,13 @@ class _ProfileViewPageState extends State<ProfileViewPage> {
          IconButton(
   icon: const Icon(Icons.logout),
   onPressed: () async {
-    await FirebaseAuth.instance.signOut();
+    await SupabaseService.signOut();
     Fluttertoast.showToast(msg: 'Logged out successfully');
     
     // Redirect to login page
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (context) => LoginScreen()), // Replace with your LoginPage widget
+      MaterialPageRoute(builder: (context) => LoginScreen()), 
     );
   },
 )

@@ -27,22 +27,22 @@
 //   }
 // }
 
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:map_app/child/bottom_page.dart';
 import 'package:map_app/login.dart';
-import 'package:map_app/sign_up.dart';
+import 'package:map_app/services/supabase_service.dart';
+// import 'package:firebase_core/firebase_core.dart'; // Commented out Firebase
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: const FirebaseOptions(
-      apiKey: "AIzaSyBGLX2-DvjRAHrmwH0hcZ97f35D9K7_aWw",
-      appId: "1:82815931514:android:d0f1202f8b54369edf57c3",
-      messagingSenderId: "82815931514",
-      projectId: "women-7b8aa",
-    ),
+  
+  // Initialize Supabase
+  await SupabaseService.initialize(
+    url: 'https://bpqyhrougqpkejyxbaaf.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwcXlocm91Z3Fwa2VqeXhiYWFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzMzA3MTUsImV4cCI6MjA4NjkwNjcxNX0.Ezyxh_mtp6oPvG1JDvHWzSvQ2IQcPs8YToHYUhcp8FE',
   );
+
+  // await Firebase.initializeApp(...) // Commented out Firebase
 
   runApp(const MyApp());
 }

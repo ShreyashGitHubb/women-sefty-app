@@ -1,12 +1,11 @@
 import 'dart:async';
 import 'dart:math';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:uuid/uuid.dart';
+// import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:map_app/services/supabase_service.dart';
 
 import '../../widgets/LiveSafe.dart';
 import '../../widgets/home_widgets/customCarouel.dart';
@@ -100,18 +99,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> fetchTrustedContacts() async {
     try {
-      String userId = FirebaseAuth.instance.currentUser?.uid ?? "Unknown User";
-
-      var snapshot =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(userId)
-              .collection('contacts')
-              .get();
-
+      final contacts = await SupabaseService.getContacts();
       setState(() {
         trustedContacts =
-            snapshot.docs.map((doc) => doc['phone_number'] as String).toList();
+            contacts.map((doc) => doc['mobile'] as String).toList();
       });
     } catch (e) {
       ScaffoldMessenger.of(
@@ -148,21 +139,15 @@ class _HomeScreenState extends State<HomeScreen> {
         throw 'Could not make a call to $emergencyNumber';
       }
 
-      String userId = FirebaseAuth.instance.currentUser?.uid ?? "Unknown User";
-      String alertId = const Uuid().v4();
-
-      final alertData = {
-        'alert_name': 'shake phone Alert',
-        'alert_id': alertId,
-        'timestamp': FieldValue.serverTimestamp(),
-        'location': GeoPoint(position.latitude, position.longitude),
-      };
-
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .collection('sos_alert')
-          .add(alertData);
+      // Log SOS Alert to Supabase
+      if (SupabaseService.currentUser != null) {
+         await SupabaseService.createSOSAlert(
+            SupabaseService.currentUser!.id, 
+            'shake_phone_Alert', 
+            position.latitude, 
+            position.longitude
+         );
+      }
 
       setState(() {
         isAlertSent = true;

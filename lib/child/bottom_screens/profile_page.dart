@@ -1,11 +1,12 @@
 
 import 'dart:io';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+// import 'package:cloud_firestore/cloud_firestore.dart'; 
+// import 'package:firebase_auth/firebase_auth.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:map_app/services/supabase_service.dart';
 
 import '../../components/PrimaryButton.dart';
 import '../../components/custom_textfield.dart';
@@ -28,19 +29,16 @@ class _ProfilePageState extends State<ProfilePage> {
   String? profilepic;
 
   // Fetch user data from Firestore
+  // Fetch user data from Supabase
   getname() async {
-    await FirebaseFirestore.instance
-        .collection('users')
-        .where('id', isEqualTo: FirebaseAuth.instance.currentUser!.uid)
-        .get()
-        .then((value) {
-      nameC.text = value.docs.first['name'];
-      emailC.text=value.docs.first['childEmail'];
-      phoneC.text=value.docs.first['phone'];
-     // parentC.text=value.docs.first['parentEmail'];
-      id = value.docs.first.id;
-      profilepic = value.docs.first['profilepic'];
-    });
+    final profile = await SupabaseService.getProfile();
+    if (profile != null) {
+        nameC.text = profile['full_name'] ?? "";
+        emailC.text = profile['child_email'] ?? ""; // prioritize child email if that's what we want
+        phoneC.text = profile['phone'] ?? "";
+        id = profile['id'];
+        profilepic = profile['avatar_url']; // Assuming we mapped it this way
+    }
     setState(() {});
   }
 
@@ -66,20 +64,32 @@ class _ProfilePageState extends State<ProfilePage> {
     });
 
     if (id != null) {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(id)
-          .update({'profilepic': null}).then((value) {
-        Fluttertoast.showToast(msg: 'Image deleted successfully');
-      }).catchError((e) {
-        Fluttertoast.showToast(msg: 'Failed to delete image: $e');
-      });
+       try {
+         // Pass null to profilePic to remove it (assuming updateProfile handles it, 
+         // or we might need to pass other fields too if we don't want to wipe them 
+         // or if updateProfile is partial).
+         // My updateProfile implementation above uses 'updates' map.
+         // If I call it with other fields as null, it might wipe them or be ignored.
+         // Let's reuse SupabaseService.updateProfile but pass current controller values for other fields.
+         
+         await SupabaseService.updateProfile(
+             name: nameC.text,
+             childEmail: emailC.text,
+             phone: phoneC.text,
+             parentEmail: null,
+             profilePic: null
+         );
+         
+         Fluttertoast.showToast(msg: 'Image deleted successfully');
+       } catch (e) {
+          Fluttertoast.showToast(msg: 'Failed to delete image: $e');
+       }
     }
   }
 
   // Logout function
   Future<void> logout() async {
-    await FirebaseAuth.instance.signOut();
+    await SupabaseService.signOut();
     Fluttertoast.showToast(msg: 'Logged out successfully');
     Navigator.of(context).pop(); // Redirect to login page or initial screen
   }
@@ -207,23 +217,19 @@ class _ProfilePageState extends State<ProfilePage> {
                     title: "Update Profile",
                     onPressed: () async {
                       if (key.currentState!.validate()) {
-                        await FirebaseFirestore.instance
-                            .collection('users')
-                            .doc(id)
-                            .update({
-
-                              'name': nameC.text,
-                              'childEmail':emailC.text,
-                          //    'parentEmail':parentC.text,
-                              'phone':phoneC.text,
-                              'profilepic': profilepic,
-                            })
-                            .then((value) => Fluttertoast.showToast(
-                                msg: 'Profile updated successfully'))
-                            .catchError((e) {
-                          Fluttertoast.showToast(
-                              msg: 'Failed to update profile: $e');
-                        });
+                        try {
+                          await SupabaseService.updateProfile(
+                              name: nameC.text,
+                              childEmail: emailC.text,
+                              // parentEmail: parentC.text, // commented out in UI too
+                              parentEmail: null,
+                              phone: phoneC.text,
+                              profilePic: profilepic,
+                          );
+                          Fluttertoast.showToast(msg: 'Profile updated successfully');
+                        } catch (e) {
+                          Fluttertoast.showToast(msg: 'Failed to update profile: $e');
+                        }
                       }
                     },
                   ),

@@ -1,6 +1,6 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:fluttertoast/fluttertoast.dart';
+import 'package:map_app/services/supabase_service.dart';
 
 import '../admin_panel/admin_register.dart';
 import '../admin_panel/main_screen.dart';
@@ -28,62 +28,61 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _formData = <String, Object>{};
   bool isloading=false;
-  _onSubmit() async
-  {
+  _onSubmit() async {
     _formKey.currentState!.save();
     try {
       setState(() {
-        isloading=true;
+        isloading = true;
       });
-  UserCredential userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
-    email: _formData['email'].toString(),
-    password: _formData['password'].toString(),
-   );
-  if(userCredential.user !=null)
-  { setState(() {
-        isloading=false;
-      });
-      FirebaseFirestore.instance.collection('users')
-      .doc(userCredential.user!.uid)
-      .get()
-      .then((value){
-        if(value['type']=='parent'){
-          
-          print(value['type']);
-          MySharedPreference.saveUserType('parent');
-          
-          goTo(context, ParentHomeScreen());
-        }
-        else if(value['type']=='child'){
-          MySharedPreference.saveUserType('child');
-          goTo(context, BottomPage());
-         }
-         else
-         {
-          print(value['type']=='admin');
-          MySharedPreference.saveUserType('admin');
-          
-         goTo(context, MainDashboard());
-         }
-        
-      });
- }  
-} on FirebaseAuthException catch (e) {
-   setState(() {
-        isloading=false;
-      });
-  if (e.code == 'user-not-found') {
-    dialog(context,'No user found for that email.');
-    print('No user found for that email.');
-  } else if (e.code == 'wrong-password') {
-    dialog(context, 'Wrong password provided for that user.');
-    print('Wrong password provided for that user.');
-  }
-}
-    print(_formData['email']);
-    print(_formData['password']);
 
+      final response = await SupabaseService.signIn(
+        _formData['email'].toString(),
+        _formData['password'].toString(),
+      );
+
+      if (response != null && response.user != null) {
+        final profile = await SupabaseService.getProfile(response.user!.id);
+        
+        setState(() {
+          isloading = false;
+        });
+
+        if (profile != null) {
+          String type = profile['type'] ?? 'child'; // Default to child if missing
+           
+          if (type == 'parent') {
+             MySharedPreference.saveUserType('parent');
+             goTo(context, ParentHomeScreen());
+          } else if (type == 'child') {
+             MySharedPreference.saveUserType('child');
+             goTo(context, BottomPage());
+          } else if (type == 'admin') {
+             MySharedPreference.saveUserType('admin');
+             goTo(context, MainDashboard());
+          } else {
+             // Fallback
+             goTo(context, BottomPage());
+          }
+        } else {
+           // If profile not found but user exists.. maybe force logic or default
+           Fluttertoast.showToast(msg: "Profile not found, defaulting to App");
+           goTo(context, BottomPage());
+        }
+
+      } else {
+         setState(() {
+          isloading = false;
+        });
+        // Error handled in service (toast)
       }
+
+    } catch (e) {
+      setState(() {
+        isloading = false;
+      });
+      dialog(context, e.toString());
+    }
+  }
    @override
   Widget build(BuildContext context) {
     bool isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;

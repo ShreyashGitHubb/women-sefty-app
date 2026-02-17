@@ -1,5 +1,5 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'package:map_app/services/supabase_service.dart';
 import 'package:flutter/material.dart';
 
 import '../chat_module/chat_screen.dart';
@@ -19,9 +19,9 @@ class ParentHomeScreen extends StatelessWidget{
           ListTile(
            title:  TextButton(onPressed: ()async{
         try{
-          FirebaseAuth.instance.signOut();
+          await SupabaseService.signOut();
           goTo(context, LoginScreen());
-        }on FirebaseAuthException catch(e){
+        } catch(e){
           dialog(context, e.toString());
         }
 
@@ -37,32 +37,38 @@ class ParentHomeScreen extends StatelessWidget{
         title: const Text("SELECT CHILD"),
         backgroundColor: Colors.pink, // Set AppBar background color to pink
       ),
-       body: StreamBuilder(
-        stream: FirebaseFirestore.instance
-            .collection('users')
-            .where('type', isEqualTo: 'child')
-            .where('parentEmail', isEqualTo: FirebaseAuth.instance.currentUser!.email)
-            .snapshots(),
-        builder: (BuildContext context, AsyncSnapshot<QuerySnapshot> snapshot) {
-          if (!snapshot.hasData) {
-            return showLoadingDialog((context));
+      body: FutureBuilder<List<Map<String, dynamic>>>(
+        future: SupabaseService.getChildren(SupabaseService.currentUser?.email ?? ''),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return showLoadingDialog(context);
           }
+          if (snapshot.hasError) {
+             return Center(child: Text("Error: ${snapshot.error}"));
+          }
+          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+             return Center(child: Text("No children found"));
+          }
+
           return ListView.builder(
-            itemCount: snapshot.data!.docs.length,
+            itemCount: snapshot.data!.length,
             itemBuilder: (BuildContext context, int index) {
-              final d = snapshot.data!.docs[index];
+              final d = snapshot.data![index];
               return Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: Container(
                   color: const Color.fromARGB(255, 250, 163, 192),
                   child: ListTile(
                     onTap: (){
-                      goTo(context, ChatScreen(currentUserId: FirebaseAuth.instance.currentUser!.uid, friendId: d.id, friendName: d['name']));
-                     // Navigator.push(context, MaterialPageRoute(builder: builder))
+                      goTo(context, ChatScreen(
+                        currentUserId: SupabaseService.currentUser!.id, 
+                        friendId: d['id'], 
+                        friendName: d['full_name']
+                      ));
                     },
                     title: Padding(
                       padding: const EdgeInsets.all(8.0),
-                      child: Text(d['name']),
+                      child: Text(d['full_name']),
                     ),
                   ),
                 ),

@@ -1,5 +1,7 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:fluttertoast/fluttertoast.dart';
+import 'package:map_app/services/supabase_service.dart';
+import 'package:map_app/utils/constants.dart';
 
 class ForgotPassword extends StatefulWidget {
   const ForgotPassword({super.key});
@@ -23,12 +25,20 @@ class _ForgotPasswordState extends State<ForgotPassword> {
     if (isLinkSent) return; // Prevent multiple link sends
 
     try {
-      await FirebaseAuth.instance.sendPasswordResetEmail(
-        email: forgotPasswordController.text.trim(),
+      final email = forgotPasswordController.text.trim();
+      if (email.isEmpty) {
+         Fluttertoast.showToast(msg: "Please enter your email");
+         return;
+      }
+      
+      await SupabaseService.client.auth.resetPasswordForEmail(
+        email,
       );
+
       setState(() {
-        isLinkSent = true; // Set the flag to true
+        isLinkSent = true; 
       });
+      
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -36,11 +46,12 @@ class _ForgotPasswordState extends State<ForgotPassword> {
           ),
         ),
       );
-      forgotPasswordController.clear(); // Clear the text field
-    } on FirebaseAuthException catch (e) {
+      forgotPasswordController.clear(); 
+
+    } catch (e) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
+      ).showSnackBar(SnackBar(content: Text("Error: $e")));
     }
   }
 

@@ -1,6 +1,5 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:map_app/services/supabase_service.dart';
 
 import '../child/child_login_screen.dart';
 import 'admin_review.dart';
@@ -28,12 +27,12 @@ class _MainDashboardState extends State<MainDashboard> {
 }
 
 class AdminOptions extends StatelessWidget {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  // final FirebaseAuth _auth = FirebaseAuth.instance;
+  // final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
 void _logout(BuildContext context) async {
     try {
-      await _auth.signOut(); // Sign out the user
+      await SupabaseService.signOut(); // Sign out the user
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const LoginScreen()), // Navigate to LoginScreen
       );

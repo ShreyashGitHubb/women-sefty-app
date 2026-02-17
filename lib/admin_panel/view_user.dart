@@ -1,8 +1,8 @@
 
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:map_app/services/supabase_service.dart';
 
 class ViewUsers extends StatefulWidget {
   const ViewUsers({super.key});
@@ -12,12 +12,13 @@ class ViewUsers extends StatefulWidget {
 }
 
 class _ViewUsersState extends State<ViewUsers> {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  // final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Function to remove user from Firestore
+  // Function to remove user from Supabase
   Future<void> _removeUser(String userId) async {
     try {
-      await _firestore.collection('users').doc(userId).delete();
+      await SupabaseService.deleteProfile(userId);
+      setState(() {}); // Trigger rebuild to refresh FutureBuilder
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("User removed successfully!")),
       );
@@ -35,14 +36,18 @@ class _ViewUsersState extends State<ViewUsers> {
         title: const Text("All Users"),
         backgroundColor: Colors.pink,
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: _firestore.collection('users').snapshots(),
+      body: FutureBuilder<List<Map<String, dynamic>>>(
+        future: SupabaseService.getAllProfiles(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final users = snapshot.data!.docs;
+          if (snapshot.hasError) {
+             return Center(child: Text("Error: ${snapshot.error}"));
+          }
+
+          final users = snapshot.data ?? [];
 
           // Calculate counts
           int totalUsers = users.length;
@@ -69,6 +74,7 @@ class _ViewUsersState extends State<ViewUsers> {
                           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                       ),
+                      // ... (Pie chart code relies on counts, unmodified) ... 
                       SizedBox(
                         height: 200,
                         child: PieChart(
@@ -116,27 +122,29 @@ class _ViewUsersState extends State<ViewUsers> {
                 child: ListView.builder(
                   itemCount: users.length,
                   itemBuilder: (context, index) {
-                    final user = users[index].data() as Map<String, dynamic>;
-                    final userId = users[index].id;
+                    final user = users[index];
+                    final userId = user['id'];
 
                     // Determine which email to display based on the role
                     String emailField = "";
                     switch (user['type']) {
                       case "child":
-                        emailField = user['childEmail'] ?? "No Email";
+                        emailField = user['child_email'] ?? "No Email"; // Note: snake_case from DB
                         break;
                       case "parent":
-                        emailField = user['parentEmail'] ?? "No Email";
+                        emailField = user['parent_email'] ?? "No Email";
                         break;
+                      // Admin might store email in 'email' or parent_email depending on reg structure, 
+                      // but let's assume 'email' from profile
                       case "admin":
-                        emailField = user['adminEmail'] ?? "No Email";
+                             emailField = user['email'] ?? "No Email";
                         break;
                       default:
-                        emailField = "No Email";
+                        emailField = user['email'] ?? "No Email";
                     }
 
                     return ListTile(
-                      title: Text(user['name'] ?? "No Name"),
+                      title: Text(user['full_name'] ?? "No Name"), // snake_case
                       subtitle: Text(emailField),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,

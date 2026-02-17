@@ -1,7 +1,6 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:map_app/child/bottom_page.dart';
+import 'package:map_app/services/supabase_service.dart';
 
 class Signup extends StatefulWidget {
   const Signup({super.key});
@@ -33,22 +32,13 @@ class _SignupState extends State<Signup> {
         _isLoading = true;
       });
       try {
-        final UserCredential userCredential = await FirebaseAuth.instance
-            .createUserWithEmailAndPassword(
-              email: _emailController.text.trim(),
-              password: _passwordController.text.trim(),
-            );
+        final response = await SupabaseService.signUp(
+          _emailController.text.trim(),
+          _passwordController.text.trim(),
+          _nameController.text.trim(),
+        );
 
-        if (userCredential.user != null) {
-          await FirebaseFirestore.instance
-              .collection('userslogin')
-              .doc(userCredential.user!.uid)
-              .set({
-                'id': userCredential.user!.uid,
-                'name': _nameController.text.trim(),
-                'email': _emailController.text.trim(),
-              });
-
+        if (response != null && response.user != null) {
           if (mounted) {
             Navigator.of(context).pushAndRemoveUntil(
               MaterialPageRoute(builder: (context) => const BottomPage()),
@@ -56,26 +46,12 @@ class _SignupState extends State<Signup> {
             );
           }
         }
-      } on FirebaseAuthException catch (error) {
-        String errorMessage = 'An error occurred during sign up.';
-        if (error.code == 'weak-password') {
-          errorMessage = 'The password provided is too weak.';
-        } else if (error.code == 'email-already-in-use') {
-          errorMessage = 'The account already exists for that email.';
-        }
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(errorMessage)));
-        }
-        print("Firebase Auth Error: $error");
       } catch (error) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('An unexpected error occurred.')),
+            SnackBar(content: Text('Sign up failed: $error')),
           );
         }
-        print("Unexpected Error: $error");
       } finally {
         if (mounted) {
           setState(() {

@@ -1,7 +1,7 @@
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:map_app/services/supabase_service.dart';
 
 class ReviewPageLocal extends StatefulWidget {
   const ReviewPageLocal({Key? key}) : super(key: key);
@@ -15,7 +15,7 @@ class _ReviewPageLocalState extends State<ReviewPageLocal> {
   bool _isAlarmActive = false;
   final TextEditingController _reviewController = TextEditingController();
   final GlobalKey<FormState> _key = GlobalKey<FormState>();
-  List<String> _localReviews = [];
+  List<Map<String, dynamic>> _reviews = [];
 
   @override
   void initState() {
@@ -25,16 +25,13 @@ class _ReviewPageLocalState extends State<ReviewPageLocal> {
   }
 
   Future<void> _loadReviews() async {
-    final prefs = await SharedPreferences.getInstance();
+    final reviews = await SupabaseService.getReviews();
     setState(() {
-      _localReviews = prefs.getStringList('local_reviews') ?? [];
+      _reviews = reviews;
     });
   }
 
-  Future<void> _saveReviews() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('local_reviews', _localReviews);
-  }
+  // Future<void> _saveReviews() async { ... } // Removed local save
 
   void _toggleAlarm() async {
     if (_isAlarmActive) {
@@ -77,15 +74,25 @@ class _ReviewPageLocalState extends State<ReviewPageLocal> {
     );
   }
 
-  void _submitReview() async {
+  Future<void> _submitReview() async {
     if (_key.currentState!.validate()) {
-      setState(() {
-        _localReviews.insert(0, _reviewController.text.trim());
-      });
-      await _saveReviews();
+      if (SupabaseService.currentUser == null) {
+         Fluttertoast.showToast(msg: "You must be logged in to post a review");
+         return;
+      }
+      
+      await SupabaseService.createReview(
+        SupabaseService.currentUser!.id, 
+        _reviewController.text.trim()
+      );
+      
+      await _loadReviews(); // Refresh list
+      
       _reviewController.clear();
+      Navigator.pop(context); // Close the sheet
+
       Fluttertoast.showToast(
-        msg: "Review added locally!",
+        msg: "Review added!",
         toastLength: Toast.LENGTH_SHORT,
         gravity: ToastGravity.BOTTOM,
         backgroundColor: Colors.green.shade400,
@@ -95,7 +102,7 @@ class _ReviewPageLocalState extends State<ReviewPageLocal> {
   }
 
   Widget _buildReviewList() {
-    if (_localReviews.isEmpty) {
+    if (_reviews.isEmpty) {
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -111,11 +118,15 @@ class _ReviewPageLocalState extends State<ReviewPageLocal> {
       );
     }
     return ListView.separated(
-      itemCount: _localReviews.length,
+      itemCount: _reviews.length,
       separatorBuilder:
           (context, index) => const Divider(height: 1, color: Colors.grey),
       itemBuilder: (context, index) {
-        final review = _localReviews[index];
+        final review = _reviews[index];
+        final profile = review['profiles']; 
+        final name = profile != null ? profile['full_name'] : "Anonymous";
+        final reviewsText = review['review'] ?? "";
+
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
           child: Row(
@@ -124,18 +135,18 @@ class _ReviewPageLocalState extends State<ReviewPageLocal> {
               CircleAvatar(
                 backgroundColor: Colors.pink.shade300,
                 foregroundColor: Colors.white,
-                child: const Icon(Icons.person),
+                child: Text(name.isNotEmpty ? name[0].toUpperCase() : "?"),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(review, style: const TextStyle(fontSize: 16)),
+                    Text(reviewsText, style: const TextStyle(fontSize: 16)),
                     const SizedBox(height: 4),
-                    const Text(
-                      "You (Local)",
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                     Text(
+                      name,
+                      style: const TextStyle(color: Colors.grey, fontSize: 12),
                     ),
                   ],
                 ),

@@ -1,8 +1,7 @@
 import 'dart:io';
-import 'package:cloud_firestore/cloud_firestore.dart';
-//import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:map_app/services/supabase_service.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
@@ -54,33 +53,7 @@ class _MessageTextFieldState extends State<MessageTextField> {
   // This function sends the message to Firestore
   Future<void> sendMessage(String content, String type) async {
     try {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.currentId)
-          .collection('messages')
-          .doc(widget.friendId)
-          .collection('chats')
-          .add({
-        'senderId': widget.currentId,
-        'receiverId': widget.friendId,
-        'message': content,
-        'type': type,
-        'date': DateTime.now(),
-      });
-
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.friendId)
-          .collection('messages')
-          .doc(widget.currentId)
-          .collection('chats')
-          .add({
-        'senderId': widget.currentId,
-        'receiverId': widget.friendId,
-        'message': content,
-        'type': type,
-        'date': DateTime.now(),
-      });
+      await SupabaseService.sendMessage(widget.friendId, content, type);
     } catch (e) {
       Fluttertoast.showToast(msg: "Failed to send message: $e");
     }

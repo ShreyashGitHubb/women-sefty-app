@@ -1,5 +1,3 @@
-// import 'package:cloud_firestore/cloud_firestore.dart';
-// import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:geolocator/geolocator.dart';
@@ -7,8 +5,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
-// import '../child_login_screen.dart';
-// import 'contacts_fire.dart';
+import 'package:map_app/services/supabase_service.dart';
 
 class AddContactLocal extends StatefulWidget {
   const AddContactLocal({super.key});
@@ -26,23 +23,6 @@ class _AddContactLocalState extends State<AddContactLocal> {
     _loadContacts();
   }
 
-  Future<void> _loadContacts() async {
-    final prefs = await SharedPreferences.getInstance();
-    final contactsData = prefs.getStringList('emergency_contacts') ?? [];
-    setState(() {
-      _contacts =
-          contactsData.map((contactString) {
-            final parts = contactString.split(',');
-            // Handle legacy data (id,name,phone) vs new data (id,name,phone,email)
-            if (parts.length >= 4) {
-               return {'id': parts[0], 'name': parts[1], 'mobileNumber': parts[2], 'email': parts[3]};
-            } else {
-               return {'id': parts[0], 'name': parts[1], 'mobileNumber': parts[2], 'email': ''};
-            }
-          }).toList();
-    });
-  }
-
   Future<void> _saveContacts() async {
     final prefs = await SharedPreferences.getInstance();
     final contactsData =
@@ -53,6 +33,20 @@ class _AddContactLocalState extends State<AddContactLocal> {
             )
             .toList();
     await prefs.setStringList('emergency_contacts', contactsData);
+  }
+
+  Future<void> _loadContacts() async {
+    final contactsData = await SupabaseService.getContacts();
+    setState(() {
+      _contacts = contactsData.map((c) => {
+        'id': c['id'].toString(),
+        'name': c['name'].toString(),
+        'mobileNumber': c['mobile'].toString(),
+        'email': c['email']?.toString() ?? '',
+      }).toList();
+    });
+    // Cache for offline usage (ShakeHandler)
+    _saveContacts();
   }
 
   Future<void> _makePhoneCall(String number) async {
@@ -91,24 +85,15 @@ class _AddContactLocalState extends State<AddContactLocal> {
   }
 
   Future<void> _deleteContact(String contactId) async {
-    setState(() {
-      _contacts.removeWhere((contact) => contact['id'] == contactId);
-    });
-    await _saveContacts();
+    await SupabaseService.deleteContact(contactId);
+    await _loadContacts(); // Refresh & Cache
     Fluttertoast.showToast(msg: "Contact removed successfully");
   }
 
   Future<void> _addContact(String name, String mobileNumber, String email) async {
     if (name.isNotEmpty && mobileNumber.isNotEmpty) {
-      setState(() {
-        _contacts.add({
-          'id': DateTime.now().millisecondsSinceEpoch.toString(),
-          'name': name,
-          'mobileNumber': mobileNumber,
-          'email': email,
-        });
-      });
-      await _saveContacts();
+      await SupabaseService.addContact(name, mobileNumber, email);
+      await _loadContacts(); // Refresh & Cache
       Fluttertoast.showToast(msg: "Contact added successfully");
     } else {
       Fluttertoast.showToast(msg: "Please enter name and mobile number");
