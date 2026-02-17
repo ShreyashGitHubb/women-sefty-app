@@ -9,7 +9,9 @@ class VoiceService {
   static final SpeechToText _speechToText = SpeechToText();
   static bool _isListening = false;
   static bool _isEnabled = true;
+  static bool _isInitialized = false;
   static String _triggerPhrase = "help";
+  static BuildContext? _context;
   
   // Custom setter for trigger phrase
   static Future<void> setTriggerPhrase(String phrase) async {
@@ -23,12 +25,18 @@ class VoiceService {
     _isEnabled = enabled;
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setBool('voice_detection_enabled', enabled);
+    if (enabled && !_isListening) {
+      _startListeningInternal();
+    } else if (!enabled) {
+      stopListening();
+    }
   }
 
   static Future<String> getTriggerPhrase() async {
     if (_triggerPhrase == "help") {
       SharedPreferences prefs = await SharedPreferences.getInstance();
-      _triggerPhrase = prefs.getString('voice_trigger_phrase') ?? "help";
+      String stored = prefs.getString('voice_trigger_phrase') ?? "help";
+      _triggerPhrase = stored.toLowerCase();
     }
     return _triggerPhrase;
   }
@@ -41,6 +49,8 @@ class VoiceService {
 
   /// Initialize speech recognition
   static Future<void> initialize() async {
+    if (_isInitialized) return;
+
     try {
       // Load settings
       await isEnabled();
@@ -62,26 +72,23 @@ class VoiceService {
           print('🎤 Voice Status: $status');
           // Restart listener if it stops and should be running
           if (status == 'done' || status == 'notListening') {
-             if (_isListening && _isEnabled) {
-               // Restart after a short delay to prevent loop
-               Future.delayed(Duration(seconds: 1), () {
-                  _startListeningInternal();
-               });
+             if (_isEnabled && _isListening) {
+               // Immediate restart check
+               _reStartListening();
              }
           }
         },
         onError: (error) {
           print('❌ Voice Error: $error');
           // Restart on error too
-          if (_isListening && _isEnabled) {
-             Future.delayed(Duration(seconds: 2), () {
-                _startListeningInternal();
-             });
+          if (_isEnabled && _isListening) {
+             _reStartListening();
           }
         },
       );
       
       if (available) {
+        _isInitialized = true;
         print('✅ Speech recognition initialized');
       } else {
         print('❌ Speech recognition not available');
@@ -92,31 +99,45 @@ class VoiceService {
     }
   }
 
-  /// Start listening for trigger phrase
-  static void startListening(BuildContext context) async {
-    _context = context; // Store context for siren
-    if (!_isEnabled || _isListening) return;
-    _isListening = true;
-    _startListeningInternal();
+  static void _reStartListening() {
+    Future.delayed(Duration(milliseconds: 500), () {
+        _startListeningInternal();
+    });
   }
 
-  static BuildContext? _context;
+  /// Start listening for trigger phrase
+  static void startListening(BuildContext context) async {
+    _context = context; 
+    _isListening = true;
+    
+    if (!_isInitialized) {
+      await initialize();
+    }
+    
+    if (_isEnabled) {
+      _startListeningInternal();
+    }
+  }
 
   static void _startListeningInternal() async {
-    if (!_isEnabled || !_isListening) return;
+    if (!_isEnabled || !_isInitialized) return;
     if (_speechToText.isListening) return;
 
     try {
+      // Android often has a system limit on listening duration. 
+      // We set a long duration, but valid restarts are key for "always on".
       await _speechToText.listen(
         onResult: (result) {
           String recognizedWords = result.recognizedWords.toLowerCase();
-          print('🗣️ Heard: "$recognizedWords"');
+          // print('🗣️ Heard: "$recognizedWords"'); // Verbose logging
           
           if (_context == null) return;
 
           // Check for trigger phrase
-          if (recognizedWords.contains(_triggerPhrase)) {
-            print('🚨 Trigger phrase detected: "$_triggerPhrase"');
+          if (recognizedWords.contains(_triggerPhrase) || 
+              recognizedWords.contains("bachao") || 
+              recognizedWords.contains("save me")) {
+            print('🚨 Trigger phrase detected: "$recognizedWords"');
             SirenService.playSiren(_context!);
           }
           
@@ -126,20 +147,22 @@ class VoiceService {
             SirenService.stopSiren();
           }
         },
-        listenFor: Duration(seconds: 20),
-        pauseFor: Duration(seconds: 3),
+        listenFor: Duration(seconds: 60), // Increased to 60s
+        pauseFor: Duration(seconds: 10),  // Increased pause tolerance
         partialResults: true,
         cancelOnError: false,
         listenMode: ListenMode.dictation,
       );
     } catch (e) {
       print('❌ Error starting listener: $e');
+      // Try to restart if it failed to start
+      _reStartListening();
     }
   }
 
   /// Stop listening
   static void stopListening() {
-    _speechToText.stop();
     _isListening = false;
+    _speechToText.stop();
   }
 }

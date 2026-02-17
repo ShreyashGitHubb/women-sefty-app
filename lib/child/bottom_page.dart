@@ -30,9 +30,9 @@ class _BottomPageState extends State<BottomPage> {
   void initState() {
     super.initState();
     // Initialize shake detector for emergency help
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       ShakeHandler.initialize(context);
-      VoiceService.initialize();
+      await VoiceService.initialize();
       VoiceService.startListening(context);
     });
   }
