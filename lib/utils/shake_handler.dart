@@ -14,52 +14,60 @@ class ShakeHandler {
   static DateTime? _lastShakeTime;
   static const Duration _cooldownDuration = Duration(seconds: 30);
   
-  // Shake detection parameters
-  static const double _shakeThreshold = 2.7; // Gravity threshold
-  static const int _shakeDuration = 500; // ms
+  // Shake detection parameters — tuned to match app-level shake (like Instagram/YouTube)
+  // Normal walking/handling produces ~1.0–2.0g. A deliberate shake starts at ~3.0g.
+  static const double _shakeThreshold = 3.5;   // g-force required per shake (raised from 2.7)
+  static const int _shakeWindowMs = 1500;       // total window to collect 3 shakes (ms)
+  static const int _shakeDebounceMs = 300;       // min gap between individual shakes (ms)
   static int _shakeCount = 0;
   static DateTime? _firstShakeTime;
+  static DateTime? _lastSingleShakeTime;         // debounce individual shake pulses
 
   /// Initialize the shake detector using sensors_plus
   static void initialize(BuildContext context) {
     _subscription = accelerometerEventStream().listen((AccelerometerEvent event) {
       _detectShake(event, context);
     });
-    
-    print('🔔 Shake detector initialized - Shake your phone 3 times for emergency help');
+    print('🔔 Shake detector initialized — shake firmly 3× for emergency help');
   }
 
   /// Detect shake from accelerometer data
   static void _detectShake(AccelerometerEvent event, BuildContext context) {
-    // Calculate acceleration magnitude
     double x = event.x;
     double y = event.y;
     double z = event.z;
-    
+
     double acceleration = sqrt(x * x + y * y + z * z);
     double gForce = acceleration / 9.81; // Normalize to g-force
-    
-    // Check if acceleration exceeds threshold
+
     if (gForce > _shakeThreshold) {
       DateTime now = DateTime.now();
-      
+
+      // Debounce: ignore if the last individual shake was too recent
+      // (this collapses a single shake "burst" of many high-g samples into one count)
+      if (_lastSingleShakeTime != null &&
+          now.difference(_lastSingleShakeTime!).inMilliseconds < _shakeDebounceMs) {
+        return;
+      }
+      _lastSingleShakeTime = now;
+
       if (_firstShakeTime == null) {
         _firstShakeTime = now;
         _shakeCount = 1;
       } else {
         int timeDiff = now.difference(_firstShakeTime!).inMilliseconds;
-        
-        if (timeDiff < _shakeDuration * 3) {
+
+        if (timeDiff < _shakeWindowMs) {
           _shakeCount++;
-          
-          // If 3 shakes detected within time window
+          // 3 deliberate shakes within the time window = emergency
           if (_shakeCount >= 3) {
             _handleShake(context);
             _resetShakeDetection();
           }
         } else {
-          // Reset if too much time passed
-          _resetShakeDetection();
+          // Time window expired — start fresh from this shake
+          _firstShakeTime = now;
+          _shakeCount = 1;
         }
       }
     }
@@ -69,6 +77,7 @@ class ShakeHandler {
   static void _resetShakeDetection() {
     _firstShakeTime = null;
     _shakeCount = 0;
+    _lastSingleShakeTime = null;
   }
 
   /// Handle shake event

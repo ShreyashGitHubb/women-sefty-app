@@ -25,30 +25,44 @@ class _BottomPageState extends State<BottomPage> {
     ProfileViewPage(),
     ReviewPageLocal(),
   ];
-  
+
   @override
   void initState() {
     super.initState();
-    // Initialize shake detector for emergency help
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Initialize shake detector for emergency help
       ShakeHandler.initialize(context);
+      // Initialize voice service (but DO NOT start listening yet)
       await VoiceService.initialize();
-      VoiceService.startListening(context);
+      // Start listening only if we're on the home tab
+      if (currentIndex == 0) {
+        VoiceService.startListening(context);
+      }
     });
   }
-  
+
   @override
   void dispose() {
-    // Clean up shake detector
     ShakeHandler.dispose();
-    VoiceService.stopListening();
+    VoiceService.stopListening(); // Always stop mic when leaving the app
     super.dispose();
   }
-  
-  onTapped(int index) {
+
+  void onTapped(int index) {
+    if (index == currentIndex) return; // No change, do nothing
+
     setState(() {
       currentIndex = index;
     });
+
+    // Control mic based on which tab we're on
+    if (index == 0) {
+      // Arriving at Home tab — start listening
+      VoiceService.startListening(context);
+    } else {
+      // Leaving Home tab — stop listening so mic doesn't block other audio
+      VoiceService.stopListening();
+    }
   }
 
   @override
@@ -77,7 +91,6 @@ class _BottomPageState extends State<BottomPage> {
             icon: Icon(Icons.contacts),
           ),
           BottomNavigationBarItem(label: 'Quick help', icon: Icon(Icons.chat)),
-
           BottomNavigationBarItem(label: 'profile', icon: Icon(Icons.person)),
           BottomNavigationBarItem(label: 'Review', icon: Icon(Icons.reviews)),
         ],

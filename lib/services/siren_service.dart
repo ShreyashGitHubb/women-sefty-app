@@ -5,8 +5,8 @@ class SirenService {
   static final AudioPlayer _audioPlayer = AudioPlayer();
   static bool _isPlaying = false;
   
-  // Publicly available police siren sound
-  static const String _sirenUrl = 'https://www.soundjy.com/upload/sound/202206/20/soundjy_20220620215830_315.mp3';
+  // Use the local asset instead of an online URL (which may be broken/unavailable)
+  static const String _sirenAsset = 'police_siren.mp3';
 
   static bool get isPlaying => _isPlaying;
 
@@ -16,9 +16,8 @@ class SirenService {
 
     try {
       _isPlaying = true;
-      await _audioPlayer.setSourceUrl(_sirenUrl);
       await _audioPlayer.setReleaseMode(ReleaseMode.loop); // Loop the siren
-      await _audioPlayer.resume();
+      await _audioPlayer.play(AssetSource(_sirenAsset));   // Use local asset
       
       // Show visual indicator that siren is playing
       if (context.mounted) {

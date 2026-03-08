@@ -7,25 +7,27 @@ import 'siren_service.dart';
 
 class VoiceService {
   static final SpeechToText _speechToText = SpeechToText();
-  static bool _isListening = false;
   static bool _isEnabled = true;
   static bool _isInitialized = false;
   static String _triggerPhrase = "help";
   static BuildContext? _context;
-  
+
+  /// Whether we WANT the mic to be running (set false by stopListening)
+  static bool _shouldBeListening = false;
+
   // Custom setter for trigger phrase
   static Future<void> setTriggerPhrase(String phrase) async {
     _triggerPhrase = phrase.toLowerCase().trim();
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString('voice_trigger_phrase', _triggerPhrase);
   }
-  
+
   // Custom setter for enabling/disabling voice detection
   static Future<void> setEnabled(bool enabled) async {
     _isEnabled = enabled;
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setBool('voice_detection_enabled', enabled);
-    if (enabled && !_isListening) {
+    if (enabled && _shouldBeListening) {
       _startListeningInternal();
     } else if (!enabled) {
       stopListening();
@@ -33,14 +35,11 @@ class VoiceService {
   }
 
   static Future<String> getTriggerPhrase() async {
-    if (_triggerPhrase == "help") {
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      String stored = prefs.getString('voice_trigger_phrase') ?? "help";
-      _triggerPhrase = stored.toLowerCase();
-    }
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    _triggerPhrase = prefs.getString('voice_trigger_phrase') ?? "help";
     return _triggerPhrase;
   }
-  
+
   static Future<bool> isEnabled() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     _isEnabled = prefs.getBool('voice_detection_enabled') ?? true;
@@ -55,11 +54,10 @@ class VoiceService {
       // Load settings
       await isEnabled();
       await getTriggerPhrase();
-      
+
       // Request microphone permission explicitly
       var status = await Permission.microphone.status;
       if (!status.isGranted) {
-        print("Requesting microphone permission...");
         status = await Permission.microphone.request();
         if (!status.isGranted) {
           print('❌ Microphone permission denied');
@@ -71,113 +69,114 @@ class VoiceService {
       bool available = await _speechToText.initialize(
         onStatus: (status) {
           print('🎤 Voice Status: $status');
-          // Restart listener if it stops and should be running
-          if (status == 'done' || status == 'notListening') {
-             if (_isEnabled && _isListening) {
-               // Immediate restart check
-               print("Restarting listener...");
-               _reStartListening();
-             }
+          // Only restart if we SHOULD be listening (haven't been stopped externally)
+          if ((status == 'done' || status == 'notListening') &&
+              _isEnabled &&
+              _shouldBeListening &&
+              !SirenService.isPlaying) {
+            // Use a longer delay to avoid rapid restart loop that blocks other audio
+            Future.delayed(const Duration(seconds: 2), () {
+              if (_shouldBeListening && _isEnabled) {
+                _startListeningInternal();
+              }
+            });
           }
         },
         onError: (error) {
           print('❌ Voice Error: $error');
-          // Restart on error too
-          if (_isEnabled && _isListening) {
-             _reStartListening();
+          // Only restart on non-permanent errors
+          if (_shouldBeListening && _isEnabled && error.errorMsg != 'error_no_match') {
+            Future.delayed(const Duration(seconds: 3), () {
+              if (_shouldBeListening && _isEnabled) {
+                _startListeningInternal();
+              }
+            });
           }
         },
       );
-      
+
       if (available) {
         _isInitialized = true;
         print('✅ Speech recognition initialized');
-        // Fluttertoast.showToast(msg: "Voice Service Initialized");
       } else {
         print('❌ Speech recognition not available');
         Fluttertoast.showToast(msg: "Voice recognition not available on this device");
       }
     } catch (e) {
       print('❌ Error initializing voice service: $e');
-      Fluttertoast.showToast(msg: "Error initializing Voice Service: $e");
     }
   }
 
-  static void _reStartListening() {
-    Future.delayed(Duration(milliseconds: 500), () {
-        _startListeningInternal();
-    });
-  }
-
-  /// Start listening for trigger phrase
+  /// Start listening for trigger phrase — call only when on the Home tab
   static void startListening(BuildContext context) async {
-    _context = context; 
-    _isListening = true;
-    
+    _context = context;
+    _shouldBeListening = true;
+
     if (!_isInitialized) {
       await initialize();
     }
-    
-    if (_isEnabled) {
+
+    if (_isEnabled && _isInitialized) {
       _startListeningInternal();
     }
   }
 
   static void _startListeningInternal() async {
-    if (!_isEnabled || !_isInitialized) {
-        print("Declined to start listening: Enabled: $_isEnabled, Initialized: $_isInitialized");
-        return;
+    if (!_isEnabled || !_isInitialized || !_shouldBeListening) {
+      return;
     }
     if (_speechToText.isListening) {
-        print("Already listening");
-        return;
+      return;
+    }
+    // Don't start mic while siren is playing — it would compete with audio
+    if (SirenService.isPlaying) {
+      return;
     }
 
     try {
-      print("Attempting to start listening...");
-      // Android often has a system limit on listening duration. 
-      // We set a long duration, but valid restarts are key for "always on".
+      print("🎤 Starting voice listener...");
       await _speechToText.listen(
         onResult: (result) {
           String recognizedWords = result.recognizedWords.toLowerCase();
-          print('🗣️ Heard: "$recognizedWords"'); // Verbose logging
-          
+          print('🗣️ Heard: "$recognizedWords"');
+
           if (_context == null) return;
 
           // Check for trigger phrase
-          if (recognizedWords.contains(_triggerPhrase) || 
-              recognizedWords.contains("bachao") || 
-              recognizedWords.contains("help") || // explicitly adding help
+          if (recognizedWords.contains(_triggerPhrase) ||
+              recognizedWords.contains("bachao") ||
+              recognizedWords.contains("help me") ||
               recognizedWords.contains("save me")) {
             print('🚨 Trigger phrase detected: "$recognizedWords"');
             SirenService.playSiren(_context!);
-            Fluttertoast.showToast(msg: "Siren Activated by Voice!");
+            Fluttertoast.showToast(msg: "🚨 Siren Activated by Voice!");
           }
-          
+
           // Check for STOP command
           if (recognizedWords.contains("stop")) {
             print('🛑 Stop command detected');
             SirenService.stopSiren();
           }
         },
-        listenFor: Duration(seconds: 30), // Reduce to standard limit, rely on restart
-        pauseFor: Duration(seconds: 5),   // Shorter pause to detect silence and restart
+        listenFor: const Duration(seconds: 30),
+        pauseFor: const Duration(seconds: 8), // Longer pause = fewer mic restarts
         partialResults: true,
-        cancelOnError: true, // Cancel on error to trigger restart logic
-        listenMode: ListenMode.confirmation, // Try confirmation or search for better continuous
+        cancelOnError: false, // Don't cancel on match-error, just let it run
+        listenMode: ListenMode.dictation, // Dictation mode = best for long phrases
       );
-      print("Listening started");
+      print("🎤 Listening started");
     } catch (e) {
       print('❌ Error starting listener: $e');
-      // Try to restart if it failed to start
-      _reStartListening();
     }
   }
 
-  /// Stop listening
+  /// Stop listening — call when leaving the Home tab
   static void stopListening() {
-    _isListening = false;
-    _speechToText.stop();
-    print("Stopped listening");
+    _shouldBeListening = false; // Prevents any pending restart from firing
+    if (_speechToText.isListening) {
+      _speechToText.stop();
+    }
+    print("🎤 Stopped listening");
   }
 }
+

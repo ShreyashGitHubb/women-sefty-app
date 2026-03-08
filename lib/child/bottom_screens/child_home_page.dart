@@ -26,11 +26,16 @@ class _HomeScreenState extends State<HomeScreen> {
   bool isAlertSent = false;
   DateTime? shakeStartTime;
   StreamSubscription? accelerometerSubscription;
+  DateTime? _lastShakePulse; // debounce individual accelerometer pulses
 
   List<String> trustedContacts = [];
   int remainingTime = 1;
   Timer? countdownTimer;
   Timer? messageDisplayTimer;
+
+  // Thresholds matching shake_handler.dart — 3.5g = ~34.3 m/s²
+  static const double _shakeThresholdMs2 = 34.3;
+  static const int _shakeDebounceMs = 400; // ms between individual shake pulses
 
   getRandomQuote() {
     Random random = Random();
@@ -48,8 +53,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void startShakeDetection() {
-    const double shakeThreshold = 12.0;
-
     accelerometerSubscription = accelerometerEvents.listen((
       AccelerometerEvent event,
     ) {
@@ -57,17 +60,31 @@ class _HomeScreenState extends State<HomeScreen> {
         event.x * event.x + event.y * event.y + event.z * event.z,
       );
 
-      if (acceleration > shakeThreshold) {
+      if (acceleration > _shakeThresholdMs2) {
+        final now = DateTime.now();
+
+        // Debounce: collapse rapid high-g burst into one shake signal
+        if (_lastShakePulse != null &&
+            now.difference(_lastShakePulse!).inMilliseconds < _shakeDebounceMs) {
+          return;
+        }
+        _lastShakePulse = now;
+
+        // Only trigger once per shake session (while isShaking is false)
         if (!isShaking) {
           shakeStartTime = DateTime.now();
-          isShaking = true;
-          remainingTime = 1;
           isAlertSent = false;
+          setState(() {
+            isShaking = true;
+            remainingTime = 1;
+          });
           startCountdown();
         }
-      } else {
+      } else if (isShaking && acceleration < _shakeThresholdMs2 * 0.5) {
+        // Stop the warning only when acceleration drops well below threshold
+        // (hysteresis prevents flickering at the boundary)
         stopCountdown();
-        isShaking = false;
+        if (mounted) setState(() => isShaking = false);
       }
     });
   }
