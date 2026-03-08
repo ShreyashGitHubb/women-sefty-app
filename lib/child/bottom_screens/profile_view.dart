@@ -1,11 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:map_app/login.dart';
 import 'package:map_app/services/supabase_service.dart';
 
-import '../child_login_screen.dart';
 import 'profile_page.dart';
-// import '../../login.dart'; 
 
 class ProfileViewPage extends StatefulWidget {
   const ProfileViewPage({super.key});

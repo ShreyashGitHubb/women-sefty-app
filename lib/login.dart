@@ -30,6 +30,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _obscureText = true;
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -40,38 +41,42 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _login() async {
     if (_formKey.currentState!.validate()) {
+      setState(() => _isLoading = true);
       try {
         final response = await SupabaseService.signIn(
-           _emailController.text.trim(),
-           _passwordController.text.trim(),
+          _emailController.text.trim(),
+          _passwordController.text.trim(),
         );
-        
+
+        if (!mounted) return;
+
         if (response != null && response.user != null) {
-          // Navigate to GetStarted screen upon successful login
+          // Navigate to BottomPage upon successful login
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (context) => BottomPage()),
+            MaterialPageRoute(builder: (context) => const BottomPage()),
           );
         }
+        // If response is null, SupabaseService already showed a toast error
       } catch (e) {
-          // Handle exceptions
-          showDialog(
-            context: context,
-            builder: (BuildContext context) {
-              return AlertDialog(
-                title: const Text('Login Error'),
-                content: Text('Login failed: $e'),
-                actions: <Widget>[
-                  TextButton(
-                    child: const Text('OK'),
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                    },
-                  ),
-                ],
-              );
-            },
-          );
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text('Login Error'),
+              content: Text('Login failed: $e'),
+              actions: <Widget>[
+                TextButton(
+                  child: const Text('OK'),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ],
+            );
+          },
+        );
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
       }
     }
   }
@@ -178,7 +183,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 10),
                       ElevatedButton(
-                        onPressed: _login,
+                        onPressed: _isLoading ? null : _login,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.brown,
                           padding: const EdgeInsets.symmetric(
@@ -189,10 +194,19 @@ class _LoginScreenState extends State<LoginScreen> {
                             borderRadius: BorderRadius.circular(10),
                           ),
                         ),
-                        child: const Text(
-                          'Login',
-                          style: TextStyle(fontSize: 18, color: Colors.white),
-                        ),
+                        child: _isLoading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text(
+                                'Login',
+                                style: TextStyle(fontSize: 18, color: Colors.white),
+                              ),
                       ),
                       const SizedBox(height: 1),
                       Row(

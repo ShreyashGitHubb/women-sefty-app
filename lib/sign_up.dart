@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:map_app/child/bottom_page.dart';
+import 'package:map_app/login.dart';
 import 'package:map_app/services/supabase_service.dart';
 
 class Signup extends StatefulWidget {
@@ -38,14 +39,34 @@ class _SignupState extends State<Signup> {
           _nameController.text.trim(),
         );
 
-        if (response != null && response.user != null) {
-          if (mounted) {
+        if (!mounted) return;
+
+        if (response != null) {
+          if (response.user != null) {
+            // User created and confirmed (email confirmation OFF)
             Navigator.of(context).pushAndRemoveUntil(
               MaterialPageRoute(builder: (context) => const BottomPage()),
               (route) => false,
             );
+          } else {
+            // Email confirmation is ON — user needs to confirm their email first
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Account created! Please check your email to confirm your account, then log in.',
+                ),
+                duration: Duration(seconds: 5),
+                backgroundColor: Colors.green,
+              ),
+            );
+            // Navigate back to Login screen
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (context) => const LoginScreen()),
+              (route) => false,
+            );
           }
         }
+        // If response is null, SupabaseService already showed a toast error
       } catch (error) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

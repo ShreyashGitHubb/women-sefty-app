@@ -3,7 +3,7 @@ import 'package:map_app/services/supabase_service.dart';
 import 'package:flutter/material.dart';
 
 import '../chat_module/chat_screen.dart';
-import '../child/child_login_screen.dart';
+import 'package:map_app/login.dart';
 import '../utils/constans.dart';
 
 class ParentHomeScreen extends StatelessWidget{

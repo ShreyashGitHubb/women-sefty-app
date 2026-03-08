@@ -179,12 +179,19 @@ class SupabaseService {
         email: email,
         password: password,
       );
+      if (response.user == null) {
+        // This case happens when email is not confirmed yet
+        Fluttertoast.showToast(
+          msg: 'Please confirm your email before logging in. Check your inbox.',
+        );
+        return null;
+      }
       return response;
     } on AuthException catch (e) {
       Fluttertoast.showToast(msg: e.message);
       return null;
     } catch (e) {
-      Fluttertoast.showToast(msg: "Error signing in: $e");
+      Fluttertoast.showToast(msg: 'Error signing in: $e');
       return null;
     }
   }
@@ -206,7 +213,7 @@ class SupabaseService {
         'id': userId,
         'email': email,
         'full_name': name,
-        'type': type,
+        'type': type ?? 'child',
         'phone': phone,
         'child_email': childEmail,
         'parent_email': parentEmail,
@@ -214,6 +221,7 @@ class SupabaseService {
       });
     } catch (e) {
       print("Error creating profile: $e");
+      rethrow; // Surface the error to signUp caller
     }
   }
 
@@ -235,29 +243,48 @@ class SupabaseService {
 
   static Future<void> addContact(String name, String mobile, String? email) async {
     final user = currentUser;
-    if (user == null) return;
-
-    await client.from('contacts').insert({
-      'user_id': user.id,
-      'name': name,
-      'mobile': mobile,
-      'email': email,
-    });
+    if (user == null) {
+      Fluttertoast.showToast(msg: 'You must be logged in to add contacts');
+      return;
+    }
+    try {
+      await client.from('contacts').insert({
+        'user_id': user.id,
+        'name': name,
+        'mobile': mobile,
+        'email': email,
+      });
+    } catch (e) {
+      print('Error adding contact: $e');
+      Fluttertoast.showToast(msg: 'Failed to add contact: $e');
+      rethrow;
+    }
   }
 
   static Future<List<Map<String, dynamic>>> getContacts() async {
     final user = currentUser;
     if (user == null) return [];
-
-    final data = await client
-        .from('contacts')
-        .select()
-        .eq('user_id', user.id);
-    return List<Map<String, dynamic>>.from(data);
+    try {
+      final data = await client
+          .from('contacts')
+          .select()
+          .eq('user_id', user.id);
+      return List<Map<String, dynamic>>.from(data);
+    } catch (e) {
+      print('Error fetching contacts: $e');
+      Fluttertoast.showToast(msg: 'Failed to load contacts');
+      return [];
+    }
   }
 
   static Future<void> deleteContact(String contactId) async {
-     await client.from('contacts').delete().eq('id', contactId);
+    try {
+      await client.from('contacts').delete().eq('id', contactId);
+    } catch (e) {
+      print('Error deleting contact: $e');
+      Fluttertoast.showToast(msg: 'Failed to delete contact');
+      rethrow;
+    }
   }
 
   // --- Chat ---

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:map_app/services/supabase_service.dart';
 
-import '../child/child_login_screen.dart';
+import 'package:map_app/login.dart';
 import 'admin_review.dart';
 import 'user_activity.dart';
 import 'view_user.dart';

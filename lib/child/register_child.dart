@@ -7,7 +7,7 @@ import '../components/SecondaryButton.dart';
 import '../components/custom_textfield.dart';
 // import '../model/user_model.dart'; // Likely not needed if we insert directly via service
 import '../utils/constans.dart';
-import 'child_login_screen.dart';
+import 'package:map_app/login.dart';
 
 class RegisterChildScreen extends StatefulWidget {
   const RegisterChildScreen({super.key});

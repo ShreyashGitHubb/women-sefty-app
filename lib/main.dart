@@ -1,32 +1,3 @@
-// import 'package:flutter/material.dart';
-// import 'package:google_fonts/google_fonts.dart';
-// import 'child/bottom_page.dart';
-// import 'db/shared_pref.dart';
-
-// void main() async {
-//   WidgetsFlutterBinding.ensureInitialized();
-//   await MySharedPreference.init();
-//   runApp(const MyApp());
-// }
-
-// class MyApp extends StatelessWidget {
-//   const MyApp({super.key});
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return MaterialApp(
-//       title: 'Rakshak',
-//       debugShowCheckedModeBanner: false,
-//       theme: ThemeData(
-//         textTheme: GoogleFonts.firaSansTextTheme(Theme.of(context).textTheme),
-//         primarySwatch: Colors.blue,
-//         useMaterial3: true,
-//       ),
-//       home: const BottomPage(),
-//     );
-//   }
-// }
-
 import 'package:flutter/material.dart';
 import 'package:map_app/child/bottom_page.dart';
 import 'package:map_app/login.dart';
@@ -44,17 +15,23 @@ void main() async {
 
   // await Firebase.initializeApp(...) // Commented out Firebase
 
-  runApp(const MyApp());
+  final initialRouteWidget = SupabaseService.client.auth.currentUser == null
+      ? const LoginScreen()
+      : const BottomPage();
+
+  runApp(MyApp(initialRouteWidget: initialRouteWidget));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final Widget initialRouteWidget;
+
+  const MyApp({super.key, required this.initialRouteWidget});
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: BottomPage(),
+      home: initialRouteWidget,
     );
   }
 }

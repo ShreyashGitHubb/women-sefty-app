@@ -3,7 +3,7 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:map_app/services/supabase_service.dart';
 import 'package:flutter/material.dart';
 
-import '../child/child_login_screen.dart';
+import 'package:map_app/login.dart';
 import '../components/PrimaryButton.dart';
 import '../components/SecondaryButton.dart';
 import '../components/custom_textfield.dart';
