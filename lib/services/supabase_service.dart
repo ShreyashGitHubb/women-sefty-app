@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:flutter/material.dart';
 
 class SupabaseService {
   static final SupabaseClient client = Supabase.instance.client;
@@ -10,32 +11,6 @@ class SupabaseService {
       url: url,
       anonKey: anonKey,
     );
-  }
-
-  static Future<void> updateProfile({
-    required String? name,
-    required String? childEmail,
-    required String? phone,
-    required String? parentEmail,
-    required String? profilePic,
-  }) async {
-    final user = client.auth.currentUser;
-    if (user == null) return;
-
-    final updates = {
-      'full_name': name,
-      'child_email': childEmail,
-      'phone': phone,
-      'parent_email': parentEmail,
-      'avatar_url': profilePic, // Mapping profilepic to avatar_url or just profilepic if col exists
-      'updated_at': DateTime.now().toIso8601String(),
-    };
-    
-    // Remove nulls if you only want to update detailed fields, but here we pass all.
-    // If a field is null, we might not want to overwrite it with null unless intended.
-    // For now, let's assume the UI passes current values if unchanged.
-    
-    await client.from('profiles').update(updates).eq('id', user.id);
   }
 
   // --- SOS Alerts ---
