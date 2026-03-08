@@ -77,19 +77,22 @@ class SupabaseService {
         'created_at': DateTime.now().toIso8601String(),
       });
     } catch (e) {
-      print("Error creating review: $e");
+      print('Error creating review: $e');
+      rethrow;
     }
   }
 
+  /// Fetch all reviews with poster name via PostgREST join.
+  /// Requires FK: reviews.user_id → profiles.id (run the SQL migration first).
   static Future<List<Map<String, dynamic>>> getReviews() async {
     try {
       final data = await client
           .from('reviews')
-          .select('*, profiles(full_name, child_email, parent_email)')
+          .select('*, profiles(full_name)')  // FK join — shows poster name
           .order('created_at', ascending: false);
       return List<Map<String, dynamic>>.from(data);
     } catch (e) {
-      print("Error fetching reviews: $e");
+      print('Error fetching reviews: $e');
       return [];
     }
   }
@@ -146,28 +149,47 @@ class SupabaseService {
       final response = await client.auth.signUp(
         email: email,
         password: password,
-        data: {'name': name, 'type': type}, // Store basic metadata
+        data: {'name': name, 'type': type},
       );
-      
+
       if (response.user != null) {
-        // Create profile entry
-        await createProfile(
-          response.user!.id, 
-          email, 
-          name, 
-          type: type, 
-          phone: phone, 
-          childEmail: childEmail, 
-          parentEmail: parentEmail
-        );
+        // Only attempt to create the profile if we have a live session.
+        // When email confirmation is ON, signUp returns a user but NO session,
+        // so any DB call will get 401. We skip it here — ensureProfileExists()
+        // will create it after the user confirms their email and logs in.
+        if (response.session != null) {
+          try {
+            await createProfile(
+              response.user!.id,
+              email,
+              name,
+              type: type,
+              phone: phone,
+              childEmail: childEmail,
+              parentEmail: parentEmail,
+            );
+          } catch (profileError) {
+            // Non-fatal — profile will be created on first login via ensureProfileExists()
+            print('Profile creation deferred (no session yet): $profileError');
+          }
+        }
       }
-      
+
       return response;
     } on AuthException catch (e) {
-      Fluttertoast.showToast(msg: e.message);
+      // 429 rate limit: too many signup attempts
+      if (e.statusCode == '429' || e.message.contains('rate limit') || e.message.contains('email')) {
+        Fluttertoast.showToast(
+          msg: 'Too many attempts. Please wait a few minutes before trying again.',
+          toastLength: Toast.LENGTH_LONG,
+          backgroundColor: Colors.orange,
+        );
+      } else {
+        Fluttertoast.showToast(msg: e.message);
+      }
       return null;
     } catch (e) {
-      Fluttertoast.showToast(msg: "Error signing up: $e");
+      Fluttertoast.showToast(msg: 'Error signing up: $e');
       return null;
     }
   }
@@ -220,26 +242,90 @@ class SupabaseService {
         'updated_at': DateTime.now().toIso8601String(),
       });
     } catch (e) {
-      print("Error creating profile: $e");
-      rethrow; // Surface the error to signUp caller
+      print('Error creating profile: $e');
+      rethrow;
     }
   }
 
-  /// Get Profile Data
+  /// Called after a successful login to ensure the profile row exists.
+  /// This handles users who signed up when email confirmation was ON —
+  /// in that case createProfile was skipped (no session = 401), so we
+  /// lazily create the profile here on their first actual login.
+  static Future<void> ensureProfileExists() async {
+    final user = currentUser;
+    if (user == null) return;
+
+    try {
+      final existing = await getProfile(user.id);
+      if (existing == null) {
+        // Profile missing — create it now that we have a valid session
+        await client.from('profiles').upsert({
+          'id': user.id,
+          'email': user.email ?? '',
+          'full_name': user.userMetadata?['name'] ?? '',
+          'type': user.userMetadata?['type'] ?? 'child',
+          'updated_at': DateTime.now().toIso8601String(),
+        }, onConflict: 'id');
+        print('✅ Profile created on first login for ${user.id}');
+      }
+    } catch (e) {
+      print('ensureProfileExists error (non-fatal): $e');
+    }
+  }
+
+  /// Get Profile Data — uses maybeSingle() so it returns null instead of
+  /// throwing PGRST116 (406) when the row doesn't exist yet.
   static Future<Map<String, dynamic>?> getProfile(String userId) async {
     try {
       final data = await client
           .from('profiles')
           .select()
           .eq('id', userId)
-          .single();
+          .maybeSingle();   // ← was .single() which threw 406 when row missing
       return data;
     } catch (e) {
-      print("Error fetching profile: $e");
+      print('Error fetching profile: $e');
       return null;
     }
   }
-  // --- Contacts ---
+
+  /// Update (or create) Profile Data.
+  /// Uses upsert so it works even if the profile row was never created
+  /// (fixes PGRST204 / 400 when PATCH matches 0 rows due to RLS or missing row).
+  static Future<void> updateProfile({
+    String? name,
+    String? phone,
+    String? childEmail,
+    String? parentEmail,
+    String? profilePic,
+  }) async {
+    final user = currentUser;
+    if (user == null) {
+      Fluttertoast.showToast(msg: 'You must be logged in to update your profile');
+      return;
+    }
+
+    try {
+      final updates = <String, dynamic>{
+        'id': user.id,                                    // required for upsert
+        'email': user.email,
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      if (name != null && name.isNotEmpty) updates['full_name'] = name;
+      if (phone != null) updates['phone'] = phone;
+      if (childEmail != null) updates['child_email'] = childEmail;
+      if (parentEmail != null) updates['parent_email'] = parentEmail;
+      if (profilePic != null) updates['avatar_url'] = profilePic;
+
+      // upsert = insert if not exists, update if exists — fixes the 400 PGRST204
+      await client.from('profiles').upsert(updates, onConflict: 'id');
+    } catch (e) {
+      print('Error updating profile: $e');
+      Fluttertoast.showToast(msg: 'Failed to update profile: $e');
+      rethrow;
+    }
+  }
 
   static Future<void> addContact(String name, String mobile, String? email) async {
     final user = currentUser;

@@ -51,6 +51,11 @@ class _LoginScreenState extends State<LoginScreen> {
         if (!mounted) return;
 
         if (response != null && response.user != null) {
+          // Lazily create the profile if it was missed during signup
+          // (happens when email confirmation is ON — no session at signup time)
+          await SupabaseService.ensureProfileExists();
+
+          if (!mounted) return;
           // Navigate to BottomPage upon successful login
           Navigator.pushReplacement(
             context,
